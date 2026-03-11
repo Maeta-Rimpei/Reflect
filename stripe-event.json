@@ -1,0 +1,9 @@
+{
+    "fixtures": [
+        {
+            "name": "customer.deleted",
+            "path": " https://api.stripe.com/v1/customers/cus_Tyw9rAWgXBjblf",
+            "method": "delete"
+        }
+    ]
+}

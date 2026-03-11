@@ -12,6 +12,21 @@
   --font-mono: var(--font-geist-mono);
 }
 
+@theme {
+  --animate-ripple-ring: ripple-ring 4s ease-out infinite;
+  --animate-ripple-ring-sm: ripple-ring-sm 3.5s ease-out infinite;
+}
+
+@keyframes ripple {
+  from { transform: scale(0); opacity: 1 }
+  to { transform: scale(1.5); opacity: 0.3  }
+}
+
+@keyframes ripple-ring-sm {
+  from { transform: scale(0.5); opacity: 1; }
+  to { transform: scale(1.5); opacity: 0.3; }
+}
+
 @media (prefers-color-scheme: dark) {
   :root {
     --background: #0a0a0a;
