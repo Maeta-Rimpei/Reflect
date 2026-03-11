@@ -66,10 +66,18 @@ export async function POST(req: NextRequest) {
     const baseUrl = process.env.NEXTAUTH_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
     const verifyUrl = `${baseUrl}/auth/verify?token=${token}`;
 
+    const from = MAIL_FROM;
+    if (!from) {
+      return NextResponse.json(
+        { error: "unavailable", message: "メールログインは現在利用できません。Google アカウントでログインしてください。" },
+        { status: 503 },
+      );
+    }
+
     // Resend でメール送信
     const resend = getResend();
     const { error: sendError } = await resend.emails.send({
-      from: MAIL_FROM,
+      from,
       to: email,
       subject: "Reflect にログイン",
       html: `
