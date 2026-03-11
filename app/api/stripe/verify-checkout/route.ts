@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { stripe, isStripeConfigured } from "@/lib/stripe";
+import { getSubscriptionPeriodEndISO, type SubscriptionWithPeriod } from "@/lib/stripe-subscription";
 import {
   createSupabaseAdminClient,
   isSupabaseAdminConfigured,
@@ -71,12 +72,12 @@ export async function POST(req: NextRequest) {
 
     // subscriptions テーブルも更新（Webhook と同じ処理、冪等）
     if (subscriptionId) {
-      const sub = await stripe.subscriptions.retrieve(subscriptionId);
+      const sub = (await stripe.subscriptions.retrieve(
+        subscriptionId,
+      )) as SubscriptionWithPeriod;
       const customerId =
         typeof sub.customer === "string" ? sub.customer : sub.customer?.id;
-      const periodEnd = sub.current_period_end
-        ? new Date(sub.current_period_end * 1000).toISOString()
-        : null;
+      const periodEnd = getSubscriptionPeriodEndISO(sub);
 
       const { error: subError } = await supabase.from("subscriptions").upsert(
         {

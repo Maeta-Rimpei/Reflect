@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { stripe, isStripeConfigured } from "@/lib/stripe";
+import { getSubscriptionPeriodEndISO, type SubscriptionWithPeriod } from "@/lib/stripe-subscription";
 import {
   createSupabaseAdminClient,
   isSupabaseAdminConfigured,
@@ -47,7 +48,9 @@ export async function POST() {
       return NextResponse.json({ plan: "free" });
     }
 
-    const sub = await stripe.subscriptions.retrieve(subRow.stripe_subscription_id);
+    const sub = (await stripe.subscriptions.retrieve(
+      subRow.stripe_subscription_id,
+    )) as SubscriptionWithPeriod;
 
     const isActive = sub.status === "active" || sub.status === "trialing";
     const newPlan = isActive ? "deep" : "free";
@@ -57,9 +60,7 @@ export async function POST() {
       .update({ plan: newPlan, updated_at: new Date().toISOString() })
       .eq("id", userId);
 
-    const periodEnd = sub.current_period_end
-      ? new Date(sub.current_period_end * 1000).toISOString()
-      : null;
+    const periodEnd = getSubscriptionPeriodEndISO(sub);
 
     await supabase
       .from("subscriptions")

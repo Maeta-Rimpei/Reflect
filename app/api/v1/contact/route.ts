@@ -89,11 +89,8 @@ export async function POST(req: NextRequest) {
 
     // Resend でお問い合わせを送信（宛先は環境変数 RESEND_CONTACT_TO_EMAIL）
     const contactToEmail = process.env.RESEND_CONTACT_TO_EMAIL;
-    if (
-      isResendConfigured() &&
-      MAIL_FROM &&
-      contactToEmail
-    ) {
+    const mailFrom = MAIL_FROM;
+    if (isResendConfigured() && mailFrom && contactToEmail) {
       const categoryLabels: Record<string, string> = {
         bug: "不具合報告",
         billing: "料金関連",
@@ -108,7 +105,7 @@ export async function POST(req: NextRequest) {
       try {
         const resend = getResend();
         const { error: sendError } = await resend.emails.send({
-          from: MAIL_FROM,
+          from: mailFrom,
           to: contactToEmail,
           replyTo: userEmail,
           subject: `[Reflect お問い合わせ] ${categoryLabel}`,

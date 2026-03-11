@@ -65,9 +65,13 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const passwordCheck = password
-    ? validatePasswordFormat(password)
-    : { ok: false as const, message: "パスワードを入力してください。" };
+  if (!password) {
+    return NextResponse.json(
+      { error: "validation", message: "パスワードを入力してください。" },
+      { status: 400 },
+    );
+  }
+  const passwordCheck = validatePasswordFormat(password);
   if (!passwordCheck.ok) {
     return NextResponse.json(
       { error: "validation", message: passwordCheck.message },
@@ -154,9 +158,17 @@ export async function POST(req: NextRequest) {
       "http://localhost:3000";
     const verifyUrl = `${baseUrl}/auth/verify?token=${token}`;
 
+    const mailFrom = MAIL_FROM;
+    if (!mailFrom) {
+      return NextResponse.json(
+        { error: "unavailable", message: "認証メールを送信できません。しばらくしてからお試しください。" },
+        { status: 503 },
+      );
+    }
+
     const resend = getResend();
     const { error: sendError } = await resend.emails.send({
-      from: MAIL_FROM,
+      from: mailFrom,
       to: email,
       subject: "Reflect — メールアドレスの確認",
       html: `

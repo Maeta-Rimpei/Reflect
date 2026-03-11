@@ -57,10 +57,11 @@ export async function DELETE() {
       );
     }
 
-    if (email && isResendConfigured()) {
+    const mailFrom = MAIL_FROM;
+    if (email && isResendConfigured() && mailFrom) {
       const resend = getResend();
       await resend.emails.send({
-        from: MAIL_FROM,
+        from: mailFrom,
         to: email,
         subject: "退会手続きが完了しました",
         text: [

@@ -1,13 +1,25 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 import Link from "next/link";
 import { RippleMotif } from "@/components/ripple-motif";
 import { Loader2 } from "lucide-react";
 
-export default function VerifyPage() {
+function VerifyFallback() {
+  return (
+    <div className="flex min-h-screen items-center justify-center px-4 py-10">
+      <div className="w-full max-w-md rounded-2xl border border-border bg-card p-8 shadow-sm text-center">
+        <RippleMotif size="sm" className="mx-auto mb-4" />
+        <Loader2 className="mx-auto h-6 w-6 animate-spin text-muted-foreground mb-3" />
+        <p className="text-sm text-muted-foreground">読み込み中…</p>
+      </div>
+    </div>
+  );
+}
+
+function VerifyContent() {
   const searchParams = useSearchParams();
   const token = searchParams.get("token");
   const [status, setStatus] = useState<"verifying" | "success" | "error">(
@@ -26,7 +38,6 @@ export default function VerifyPage() {
 
     (async () => {
       try {
-        // 1. トークンの有効性を事前検証
         const verifyRes = await fetch("/api/auth/verify-token", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -45,8 +56,6 @@ export default function VerifyPage() {
           return;
         }
 
-        // 2. トークン有効 → NextAuth でセッション発行（リダイレクト）
-        //    magic-link authorize 内でトークン消費 + email_verified=true が行われる
         await signIn("magic-link", {
           token,
           redirectTo: "/journal",
@@ -110,5 +119,13 @@ export default function VerifyPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function VerifyPage() {
+  return (
+    <Suspense fallback={<VerifyFallback />}>
+      <VerifyContent />
+    </Suspense>
   );
 }

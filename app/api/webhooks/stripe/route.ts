@@ -1,16 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { stripe, STRIPE_WEBHOOK_SECRET } from "@/lib/stripe";
+import {
+  getSubscriptionPeriodEndISO,
+  type SubscriptionWithPeriod,
+} from "@/lib/stripe-subscription";
 import { createSupabaseAdminClient, isSupabaseAdminConfigured } from "@/lib/supabase-admin";
 import { logger } from "@/lib/logger";
-
-/** Stripe API の Subscription に存在する current_period_end（型定義に含まれない場合用） */
-type SubscriptionWithPeriod = Stripe.Subscription & { current_period_end?: number };
-
-function getPeriodEndISO(sub: SubscriptionWithPeriod): string | null {
-  if (sub.current_period_end == null) return null;
-  return new Date(sub.current_period_end * 1000).toISOString();
-}
 
 export async function POST(req: NextRequest) {
   if (!stripe || !STRIPE_WEBHOOK_SECRET) {
@@ -61,7 +57,7 @@ export async function POST(req: NextRequest) {
         if (subscriptionId) {
           const sub = await stripe.subscriptions.retrieve(subscriptionId) as SubscriptionWithPeriod;
           const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer?.id;
-          const periodEnd = getPeriodEndISO(sub);
+          const periodEnd = getSubscriptionPeriodEndISO(sub);
 
           await supabase.from("users").update({ plan: "deep", updated_at: new Date().toISOString() }).eq("id", userId);
 
@@ -92,7 +88,7 @@ export async function POST(req: NextRequest) {
       case "customer.subscription.updated": {
         const sub = event.data.object as SubscriptionWithPeriod;
         const userId = sub.metadata?.user_id;
-        const periodEnd = getPeriodEndISO(sub);
+        const periodEnd = getSubscriptionPeriodEndISO(sub);
         const customerId = typeof sub.customer === "string" ? sub.customer : (sub.customer as { id?: string })?.id;
 
         const subUpdate = {
@@ -124,7 +120,7 @@ export async function POST(req: NextRequest) {
       case "customer.subscription.deleted": {
         const sub = event.data.object as SubscriptionWithPeriod;
         const userId = sub.metadata?.user_id;
-        const periodEnd = getPeriodEndISO(sub);
+        const periodEnd = getSubscriptionPeriodEndISO(sub);
         const updatePayload = {
           status: "canceled",
           current_period_end: periodEnd,
