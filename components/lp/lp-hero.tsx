@@ -6,7 +6,7 @@ export function LpHero() {
   return (
     <section className="relative flex min-h-[90vh] flex-col items-center justify-center overflow-hidden px-6 pt-14">
       {/* Large ripple background */}
-      <div className="absolute inset-0 -top-[100px] flex items-center justify-center pointer-events-none">
+      <div className="absolute inset-0 -top-[100px] -right-[150px] md:-right-[300px] flex items-center justify-center pointer-events-none">
         <div className="relative h-[500px] w-[500px] md:h-[700px] md:w-[700px] opacity-60">
           <RippleMotif size="lg" className="!h-full !w-full" />
         </div>
@@ -18,8 +18,10 @@ export function LpHero() {
           Self Reflection Tool
         </p>
 
-        <h1 className="text-4xl font-semibold leading-relaxed tracking-tight text-foreground md:text-6xl  text-balance">
-          書くことで、自分が映る。
+        <h1 className="text-4xl font-semibold leading-snug tracking-tight text-foreground md:text-6xl text-balance">
+          迷いを書き、<br/>
+          自分が見える。<br/>
+          そして次の一歩を。<br/>
         </h1>
 
         <p className="mt-6 max-w-md text-sm leading-relaxed text-muted-foreground md:text-base">

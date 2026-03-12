@@ -346,7 +346,7 @@ export function AnalysisPage({
     openDialog({
       title: "人格サマリーを生成しますか？",
       description:
-        "年次レポートをもとに人格サマリーを生成します。前回の生成から1か月経過しないと再生成できません。問いかけも同時に更新されます。",
+        "これまでの分析（年次・週次・月次レポート）をもとに人格サマリーを生成します。年次がなくても週次・月次があれば生成できます。前回の生成から1か月経過しないと再生成できません。問いかけも同時に更新されます。",
       confirmLabel: "生成する",
       onConfirm: () => {
         void executeGeneratePersonality();

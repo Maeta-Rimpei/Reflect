@@ -102,7 +102,7 @@ export function AppShell({
                 </span>
               </div>
               <p className="text-xs text-muted-foreground leading-relaxed mb-3">
-                Deep分析・人格サマリー・問いかけモードが使えます。
+                Deep分析・人格サマリー・問いかけが使えます。
               </p>
               <Link
                 href="/settings"

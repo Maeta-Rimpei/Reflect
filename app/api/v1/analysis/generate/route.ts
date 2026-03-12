@@ -166,6 +166,9 @@ export async function POST(req: NextRequest) {
       );
       if (cooldownError) return cooldownError;
 
+      // 入力テキスト: 年次レポートがあればそれを、なければ週次・月次から組み立てる
+      let inputText = "";
+
       const { data: existingYearlyResults } = await supabase
         .from("analysis_results")
         .select("payload")
@@ -174,33 +177,104 @@ export async function POST(req: NextRequest) {
         .order("created_at", { ascending: false })
         .limit(10);
 
-      const inputText = (existingYearlyResults ?? [])
-        .map((r) => {
-          const p = r.payload as {
-            coreThoughtPatterns?: string[];
-            emotionTrend?: string;
-            stressSourcesRanking?: string[];
-            motivationDrivers?: string[];
-            identityTraits?: string[];
-          };
-          return [
-            (p.coreThoughtPatterns ?? []).join("、"),
-            p.emotionTrend,
-            (p.stressSourcesRanking ?? []).join("、"),
-            (p.motivationDrivers ?? []).join("、"),
-            (p.identityTraits ?? []).join("、"),
-          ]
-            .filter(Boolean)
-            .join(" ");
-        })
-        .join("\n\n");
+      if (existingYearlyResults && existingYearlyResults.length > 0) {
+        inputText = (existingYearlyResults ?? [])
+          .map((r) => {
+            const p = r.payload as {
+              coreThoughtPatterns?: string[];
+              emotionTrend?: string;
+              stressSourcesRanking?: string[];
+              motivationDrivers?: string[];
+              identityTraits?: string[];
+            };
+            return [
+              (p.coreThoughtPatterns ?? []).join("、"),
+              p.emotionTrend,
+              (p.stressSourcesRanking ?? []).join("、"),
+              (p.motivationDrivers ?? []).join("、"),
+              (p.identityTraits ?? []).join("、"),
+            ]
+              .filter(Boolean)
+              .join(" ");
+          })
+          .join("\n\n");
+      }
+
+      // 年次が無い or 空 → 週次・月次でフォールバック
+      if (!inputText.trim()) {
+        const { from: fallbackFrom, to: fallbackTo } =
+          getLast12MonthsRangeInTokyo();
+        const monthlyRows = await supabase
+          .from("analysis_results")
+          .select("period_from, period_to, payload, created_at")
+          .eq("user_id", userId)
+          .eq("type", "monthly")
+          .lte("period_from", fallbackTo)
+          .gte("period_to", fallbackFrom)
+          .order("period_from", { ascending: true });
+
+        const weeklyRows = await supabase
+          .from("analysis_results")
+          .select("period_from, period_to, payload, created_at")
+          .eq("user_id", userId)
+          .eq("type", "weekly")
+          .lte("period_from", fallbackTo)
+          .gte("period_to", fallbackFrom)
+          .order("period_from", { ascending: true });
+
+        type Row = {
+          period_from: string;
+          period_to: string;
+          payload: unknown;
+          created_at: string;
+        };
+        const monthly = (monthlyRows.data ?? []) as Row[];
+        const weekly = (weeklyRows.data ?? []) as Row[];
+        const allRows = [
+          ...monthly.map((r) => ({ ...r, kind: "monthly" as const })),
+          ...weekly.map((r) => ({ ...r, kind: "weekly" as const })),
+        ].sort(
+          (a, b) =>
+            a.period_from.localeCompare(b.period_from) ||
+            a.created_at.localeCompare(b.created_at),
+        );
+
+        const lines: string[] = [];
+        let totalLen = 0;
+        for (const row of allRows) {
+          if (totalLen >= YEARLY_INPUT_MAX) break;
+          const p = (row.payload ?? {}) as Record<string, unknown>;
+          let insight = "";
+          let patterns = "";
+          if (row.kind === "weekly") {
+            insight = String(p.weeklyInsight ?? "").slice(0, YEARLY_SUMMARY_MAX);
+            patterns = (Array.isArray(p.thoughtPatterns)
+              ? p.thoughtPatterns
+              : []
+            ).slice(0, 5).join("、");
+          } else {
+            insight = String(p.monthlyInsight ?? "").slice(
+              0,
+              YEARLY_SUMMARY_MAX,
+            );
+            patterns = (Array.isArray(p.recurringThoughtPatterns)
+              ? p.recurringThoughtPatterns
+              : []
+            ).slice(0, 5).join("、");
+          }
+          const line = `[${row.period_from}〜${row.period_to}] ${row.kind === "monthly" ? "月次" : "週次"}: ${insight}${patterns ? ` パターン: ${patterns}` : ""}`;
+          lines.push(line);
+          totalLen += line.length + 1;
+        }
+        inputText = lines.join("\n").slice(0, YEARLY_INPUT_MAX);
+      }
 
       if (!inputText.trim()) {
         return NextResponse.json(
           {
             error: "validation",
             message:
-              "人格サマリーの生成には年次レポートが必要です。先に年次レポートを生成してください。",
+              "人格サマリーの生成には、年次・週次・月次のいずれかのレポートが必要です。先に週次または月次レポートを生成してください。",
           },
           { status: 400 },
         );

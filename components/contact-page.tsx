@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { getApiHeaders } from "@/lib/api-auth";
@@ -8,6 +8,18 @@ import { CONTACT_CATEGORIES, type ContactCategory } from "@/types/contact";
 
 /** お問い合わせ本文の最大文字数 */
 const MAX_BODY = 2000;
+
+/** 不具合報告用テンプレート（自動挿入） */
+const BUG_REPORT_TEMPLATE = `・不具合が発生したページ：
+
+・行った操作内容：
+
+・お使いのOS(端末)：
+
+・お使いのブラウザ：
+
+・不具合が発生した日時：
+`.trim();
 
 /** お問い合わせフォーム（カテゴリ・本文送信）を表示するページ */
 export function ContactPage() {
@@ -21,6 +33,15 @@ export function ContactPage() {
   const [sent, setSent] = useState(false);
   /** 送信失敗時のエラーメッセージ */
   const [error, setError] = useState<string | null>(null);
+
+  /** 不具合報告を選んだときにテンプレートを自動挿入（本文が空のときのみ） */
+  useEffect(() => {
+    if (category === "bug" && !body.trim()) {
+      setBody(BUG_REPORT_TEMPLATE);
+    } else {
+      setBody("");
+    }
+  }, [category]);
 
   /** フォーム送信: POST /api/v1/contact で送信し、成功時は sent を true に */
   const handleSubmit = async (e: React.FormEvent) => {
@@ -67,14 +88,14 @@ export function ContactPage() {
           お問い合わせ
         </h1>
         <p className="text-sm text-muted-foreground mb-8">
-          ご意見・ご要望・不具合報告はこちらからお願いいたします。
+          ご意見・ご要望・不具合報告等についてはこちらからお願いいたします。
         </p>
 
         {sent ? (
           <div className="rounded-xl border border-border bg-card p-6 text-center">
             <p className="text-sm font-medium text-foreground mb-1">送信しました</p>
             <p className="text-xs text-muted-foreground">
-              お問い合わせを受け付けました。運営よりメールで返信する場合があります。
+              お問い合わせを受け付けました。運営よりメールでご返信する場合がございます。
             </p>
             <button
               type="button"
@@ -109,6 +130,11 @@ export function ContactPage() {
               <label className="block text-xs font-medium uppercase tracking-widest text-muted-foreground mb-2">
                 お問い合わせ内容
               </label>
+              {category === "bug" && (
+                <p className="text-xs text-muted-foreground mb-2 rounded-lg bg-muted/50 px-3 py-2">
+                  不具合報告の際は、お手数ですが以下情報のご提供をお願いいたします。
+                </p>
+              )}
               <textarea
                 value={body}
                 onChange={(e) => setBody(e.target.value.slice(0, MAX_BODY))}
