@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { auth } from "@/auth";
-import { AppShell } from "@/components/app-shell";
 import { AnalysisHistoryPage } from "@/components/analysis-history-page";
 import { fetchAnalysisHistoryInitialData } from "@/lib/fetch-analysis-history-initial-data";
 import { getPlan } from "@/lib/get-plan";
@@ -28,9 +27,5 @@ export default async function AnalysisHistoryPageRoute() {
 
   const initialData = await fetchAnalysisHistoryInitialData(baseUrl, cookieHeader);
 
-  return (
-    <AppShell plan={plan}>
-      <AnalysisHistoryPage initialData={initialData} />
-    </AppShell>
-  );
+  return <AnalysisHistoryPage initialData={initialData} />;
 }

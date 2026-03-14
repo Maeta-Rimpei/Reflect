@@ -121,6 +121,19 @@ export function getLastNDaysRangeInTokyo(days: number): { from: string; to: stri
 }
 
 /**
+ * 日付文字列の翌日を返す。
+ * timestamptz カラムの範囲クエリで lte(to) の代わりに lt(nextDay(to)) を使う。
+ * @param dateStr - YYYY-MM-DD
+ * @returns 翌日の YYYY-MM-DD
+ */
+export function getNextDay(dateStr: string): string {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const date = new Date(y, m - 1, d);
+  date.setDate(date.getDate() + 1);
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+/**
  * 日付文字列の前日を返す。
  * @param dateStr - YYYY-MM-DD
  * @returns 前日の YYYY-MM-DD

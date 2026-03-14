@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
@@ -15,6 +16,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { RippleMotif } from "@/components/ripple-motif";
+import PageLoadingSkeleton from "@/components/page-loading-skeleton";
 
 const navigation = [
   { name: "今日のふりかえり", shortName: "ふりかえり", href: "/journal", icon: PenLine },
@@ -33,6 +35,13 @@ export function AppShell({
   plan: "free" | "deep";
 }) {
   const pathname = usePathname();
+  const [isNavigating, setIsNavigating] = useState(false);
+
+  useEffect(() => {
+    setIsNavigating(false);
+  }, [pathname]);
+
+  const mainContent = isNavigating ? <PageLoadingSkeleton /> : children;
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
@@ -55,6 +64,7 @@ export function AppShell({
                 <li key={item.name}>
                   <Link
                     href={item.href}
+                    onClick={() => setIsNavigating(true)}
                     className={cn(
                       "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors cursor-pointer",
                       isActive
@@ -127,7 +137,7 @@ export function AppShell({
         </header>
 
         {/* Main Content（スマホ時はタブバー高さ分の余白を確保） */}
-        <main className="flex-1 overflow-y-auto pb-16 md:pb-0">{children}</main>
+        <main className="flex-1 overflow-y-auto pb-16 md:pb-0">{mainContent}</main>
 
         {/* Mobile Tab Bar */}
         <nav
@@ -137,10 +147,11 @@ export function AppShell({
           {navigation.map((item) => {
             const isActive = pathname === item.href;
             return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
+            <Link
+              key={item.href}
+              href={item.href}
+              onClick={() => setIsNavigating(true)}
+              className={cn(
                   "flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 py-2 px-1 text-[10px] font-medium transition-colors cursor-pointer",
                   isActive
                     ? "text-foreground"

@@ -18,7 +18,7 @@ const features = [
     icon: Brain,
     title: "Analysis",
     description:
-      "週次・月次で思考傾向を分析し、レポートを生成。今まで気づかなかった自分の傾向を発見。",
+      "週次・月次・年次で思考傾向を分析し、レポートを生成。今まで気づかなかった自分の傾向を発見。",
   },
   {
     icon: Shield,

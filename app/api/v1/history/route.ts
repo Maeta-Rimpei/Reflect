@@ -46,12 +46,8 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const baseUrl =
-      process.env.NEXTAUTH_URL ??
-      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : new URL(req.url).origin);
-    const cookieHeader = req.headers.get("cookie") ?? "";
-
-    const data = await fetchHistoryRangeData(baseUrl, cookieHeader, {
+    const userId = session.user.id;
+    const data = await fetchHistoryRangeData(userId, {
       from: fromParam,
       to: toParam,
       viewMonth,

@@ -1,11 +1,16 @@
 /**
  * 分析ページの初回表示用データをサーバー側で取得する。
- * Server Component から呼び、Cookie 付きで API に問い合わせる。
+ * Supabase を直接利用し、自 API への HTTP 呼び出しを行わない。
  */
+import {
+  createSupabaseAdminClient,
+  isSupabaseAdminConfigured,
+} from "@/lib/supabase-admin";
 import {
   getWeekRangeInTokyo,
   getMonthRangeInTokyo,
   getLast12MonthsRangeInTokyo,
+  getNextDay,
 } from "@/lib/date-utils";
 import type {
   AnalysisInitialData,
@@ -15,87 +20,147 @@ import type {
   YearlyPayload,
 } from "@/types/analysis";
 
+/** plan を除いた分析初期データ（plan はページで getPlan() と結合する） */
+export type AnalysisInitialDataWithoutPlan = Omit<
+  AnalysisInitialData,
+  "plan"
+>;
+
 /**
- * 分析ページ用の初期データを取得する。認証は API 側で Cookie を検証する。
- * @param baseUrl - アプリのオリジン（例: process.env.NEXTAUTH_URL）
- * @param cookieHeader - リクエストの Cookie ヘッダー（そのまま API に渡す）
+ * 分析ページ用の初期データを取得する。Supabase を直接参照する。
+ * @param userId - 認証済みユーザー ID（呼び出し元で auth() 取得済みであること）
  */
 export async function fetchAnalysisInitialData(
-  baseUrl: string,
-  cookieHeader: string,
-): Promise<AnalysisInitialData> {
+  userId: string,
+): Promise<AnalysisInitialDataWithoutPlan> {
+  if (!isSupabaseAdminConfigured()) {
+    return {
+      weeklyReport: null,
+      monthlyReport: null,
+      yearlyReport: null,
+      personalitySummary: null,
+      questions: [],
+    };
+  }
+
   const { from: wFrom, to: wTo } = getWeekRangeInTokyo();
   const { from: mFrom, to: mTo } = getMonthRangeInTokyo();
   const { from: yFrom, to: yTo } = getLast12MonthsRangeInTokyo();
 
-  const headers = { Cookie: cookieHeader };
+  const supabase = createSupabaseAdminClient();
 
-  const [meRes, weeklyRes, monthlyRes, yearlyRes, summaryRes, questionRes] =
+  const [weeklyRes, monthlyRes, yearlyRes, personalityRes, questionRes] =
     await Promise.all([
-      fetch(`${baseUrl}/api/v1/me`, { headers, cache: "no-store" }),
-      fetch(
-        `${baseUrl}/api/v1/analysis?type=weekly&from=${wFrom}&to=${wTo}`,
-        { headers, cache: "no-store" },
-      ),
-      fetch(
-        `${baseUrl}/api/v1/analysis?type=monthly&from=${mFrom}&to=${mTo}`,
-        { headers, cache: "no-store" },
-      ),
-      fetch(
-        `${baseUrl}/api/v1/analysis?type=yearly&from=${yFrom}&to=${yTo}`,
-        { headers, cache: "no-store" },
-      ),
-      fetch(`${baseUrl}/api/v1/analysis/summary`, {
-        headers,
-        cache: "no-store",
-      }),
-      fetch(`${baseUrl}/api/v1/analysis?type=question`, {
-        headers,
-        cache: "no-store",
-      }),
+      supabase
+        .from("analysis_results")
+        .select("id, period_from, period_to, payload, created_at")
+        .eq("user_id", userId)
+        .eq("type", "weekly")
+        .gte("period_from", wFrom)
+        .lt("period_to", getNextDay(wTo))
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from("analysis_results")
+        .select("id, period_from, period_to, payload, created_at")
+        .eq("user_id", userId)
+        .eq("type", "monthly")
+        .gte("period_from", mFrom)
+        .lt("period_to", getNextDay(mTo))
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from("analysis_results")
+        .select("id, period_from, period_to, payload, created_at")
+        .eq("user_id", userId)
+        .eq("type", "yearly")
+        .gte("period_from", yFrom)
+        .lt("period_to", getNextDay(yTo))
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from("analysis_results")
+        .select("payload, created_at")
+        .eq("user_id", userId)
+        .eq("type", "personality")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from("analysis_results")
+        .select("payload")
+        .eq("user_id", userId)
+        .eq("type", "question")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
     ]);
 
-  const plan: "free" | "deep" = meRes.ok
-    ? ((await meRes.json()) as { plan?: "free" | "deep" }).plan ?? "free"
-    : "free";
+  const weeklyReport =
+    weeklyRes.data != null
+      ? {
+          period: {
+            from: weeklyRes.data.period_from,
+            to: weeklyRes.data.period_to,
+          },
+          payload: weeklyRes.data.payload as WeeklyPayload,
+        }
+      : null;
 
-  const weeklyList = weeklyRes.ok
-    ? (await weeklyRes.json()) as Array<{
-        period: { from: string; to: string };
-        payload: WeeklyPayload;
-      }>
-    : [];
-  const monthlyList = monthlyRes.ok
-    ? (await monthlyRes.json()) as Array<{
-        period: { from: string; to: string };
-        payload: MonthlyPayload;
-      }>
-    : [];
-  const yearlyList = yearlyRes.ok
-    ? (await yearlyRes.json()) as Array<{
-        period: { from: string; to: string };
-        payload: YearlyPayload;
-      }>
-    : [];
+  const monthlyReport =
+    monthlyRes.data != null
+      ? {
+          period: {
+            from: monthlyRes.data.period_from,
+            to: monthlyRes.data.period_to,
+          },
+          payload: monthlyRes.data.payload as MonthlyPayload,
+        }
+      : null;
 
-  const personalitySummary: PersonalityData | null = summaryRes.ok
-    ? (await summaryRes.json()) as PersonalityData
-    : null;
+  const yearlyReport =
+    yearlyRes.data != null
+      ? {
+          period: {
+            from: yearlyRes.data.period_from,
+            to: yearlyRes.data.period_to,
+          },
+          payload: yearlyRes.data.payload as YearlyPayload,
+        }
+      : null;
+
+  let personalitySummary: PersonalityData | null = null;
+  if (personalityRes.data?.payload != null) {
+    const p = personalityRes.data.payload as {
+      tendency?: string;
+      strengthSignals?: string[];
+      riskPatterns?: string[];
+      downTriggers?: string;
+      recoveryActions?: string;
+    };
+    personalitySummary = {
+      tendency: p.tendency ?? "",
+      strengthSignals: p.strengthSignals ?? [],
+      riskPatterns: p.riskPatterns ?? [],
+      downTriggers: p.downTriggers ?? "",
+      recoveryActions: p.recoveryActions ?? "",
+      updatedAt: personalityRes.data.created_at,
+    };
+  }
 
   let questions: string[] = [];
-  if (questionRes.ok) {
-    const list = (await questionRes.json()) as Array<{
-      payload: { questions?: string[] };
-    }>;
-    const latest = list?.[0]?.payload?.questions;
-    questions = Array.isArray(latest) ? latest : [];
+  if (questionRes.data?.payload != null) {
+    const q = questionRes.data.payload as { questions?: string[] };
+    questions = Array.isArray(q.questions) ? q.questions : [];
   }
 
   return {
-    plan,
-    weeklyReport: weeklyList?.length > 0 ? weeklyList[0] : null,
-    monthlyReport: monthlyList?.length > 0 ? monthlyList[0] : null,
-    yearlyReport: yearlyList?.length > 0 ? yearlyList[0] : null,
+    weeklyReport,
+    monthlyReport,
+    yearlyReport,
     personalitySummary,
     questions,
   };

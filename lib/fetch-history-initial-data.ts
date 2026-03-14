@@ -1,8 +1,17 @@
 /**
  * 履歴ページの初回表示用データをサーバー側で取得する。
- * 今月分を要求し、403（Free プラン制限）の場合は直近7日で再取得する。
+ * Supabase を直接利用する。
  */
-import { getLast7DaysRangeInTokyo, getTodayPartsInTokyo } from "@/lib/date-utils";
+import {
+  createSupabaseAdminClient,
+  isSupabaseAdminConfigured,
+} from "@/lib/supabase-admin";
+import { decrypt, isEncryptionConfigured } from "@/lib/crypto";
+import {
+  getLast7DaysRangeInTokyo,
+  getNextDay,
+  getTodayPartsInTokyo,
+} from "@/lib/date-utils";
 import type { EntryItem, EmotionRow, HistoryInitialData } from "@/types/entry";
 
 function getDaysInMonth(month: number, year: number): number {
@@ -33,8 +42,13 @@ function parseEntryDatesFromCalendar(
   return [...dates];
 }
 
-function ensureArray<T>(value: unknown): T[] {
-  return Array.isArray(value) ? value : [];
+function toYYYYMMDDFromUnknown(v: unknown): string {
+  if (v == null || v === "") return "";
+  const s = String(v);
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  const d = new Date(v as string | number | Date);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("en-CA", { timeZone: "Asia/Tokyo" });
 }
 
 /** 履歴範囲取得のパラメータ（API と初回取得で共通） */
@@ -46,111 +60,159 @@ export interface FetchHistoryRangeParams {
 }
 
 /**
- * 指定範囲の履歴データを取得。403 時は直近7日にフォールバックする。
- * サーバー（初回表示）と GET /api/v1/history の両方で利用。
+ * 指定範囲の履歴データを取得。Free プランで範囲が 7 日超の場合は直近 7 日でフォールバックする。
+ * @param userId - 認証済みユーザー ID
  */
 export async function fetchHistoryRangeData(
-  baseUrl: string,
-  cookieHeader: string,
+  userId: string,
   params: FetchHistoryRangeParams,
-): Promise<Omit<HistoryInitialData, "viewMonth" | "viewYear"> & { viewMonth: number; viewYear: number }> {
+): Promise<
+  Omit<HistoryInitialData, "viewMonth" | "viewYear"> & {
+    viewMonth: number;
+    viewYear: number;
+  }
+> {
   const { from: fromParam, to: toParam, viewMonth, viewYear } = params;
-  const headers = { Cookie: cookieHeader };
+  const empty = {
+    entries: [] as EntryItem[],
+    emotions: [] as EmotionRow[],
+    entryDates: [] as number[],
+    isFreeLimit: false,
+    viewMonth,
+    viewYear,
+  };
 
-  const [entriesRes, calendarRes, emotionsRes] = await Promise.all([
-    fetch(`${baseUrl}/api/v1/entries?from=${fromParam}&to=${toParam}`, {
-      headers,
-      cache: "no-store",
-    }),
-    fetch(`${baseUrl}/api/v1/calendar?from=${fromParam}&to=${toParam}`, {
-      headers,
-      cache: "no-store",
-    }),
-    fetch(`${baseUrl}/api/v1/emotions?from=${fromParam}&to=${toParam}`, {
-      headers,
-      cache: "no-store",
-    }),
+  if (!isSupabaseAdminConfigured()) {
+    return empty;
+  }
+
+  const supabase = createSupabaseAdminClient();
+
+  const { data: profile } = await supabase
+    .from("users")
+    .select("plan")
+    .eq("id", userId)
+    .single();
+  const plan: "free" | "deep" =
+    profile?.plan === "deep" || profile?.plan === "free" ? profile.plan : "free";
+
+  const fromDate = new Date(fromParam);
+  const toDate = new Date(toParam);
+  const rangeDays =
+    Math.ceil((toDate.getTime() - fromDate.getTime()) / (24 * 60 * 60 * 1000)) +
+    1;
+  const isFreeLimit = plan === "free" && rangeDays > 7;
+
+  const actualFrom = isFreeLimit
+    ? getLast7DaysRangeInTokyo().from
+    : fromParam;
+  const actualTo = isFreeLimit ? getLast7DaysRangeInTokyo().to : toParam;
+
+  const { data: entriesRows, error: entriesError } = await supabase
+    .from("entries")
+    .select("id, body, posted_at, created_at")
+    .eq("user_id", userId)
+    .gte("posted_at", actualFrom)
+    .lt("posted_at", getNextDay(actualTo))
+    .order("posted_at", { ascending: false });
+
+  if (entriesError || !entriesRows?.length) {
+    return {
+      ...empty,
+      isFreeLimit,
+    };
+  }
+
+  const entryIds = entriesRows.map((e) => e.id);
+  const [moodsRes, tagsRes] = await Promise.all([
+    supabase
+      .from("moods")
+      .select("entry_id, value")
+      .eq("user_id", userId)
+      .in("entry_id", entryIds),
+    supabase
+      .from("emotion_tags")
+      .select("entry_id, tag, created_at")
+      .eq("user_id", userId)
+      .in("entry_id", entryIds)
+      .order("created_at", { ascending: true }),
   ]);
 
-  const isPlanLimit = entriesRes.status === 403 || calendarRes.status === 403;
-
-  if (isPlanLimit) {
-    const { from: from7, to: to7 } = getLast7DaysRangeInTokyo();
-    const [e7, c7, em7] = await Promise.all([
-      fetch(`${baseUrl}/api/v1/entries?from=${from7}&to=${to7}`, {
-        headers,
-        cache: "no-store",
-      }),
-      fetch(`${baseUrl}/api/v1/calendar?from=${from7}&to=${to7}`, {
-        headers,
-        cache: "no-store",
-      }),
-      fetch(`${baseUrl}/api/v1/emotions?from=${from7}&to=${to7}`, {
-        headers,
-        cache: "no-store",
-      }),
-    ]);
-    const calendarJson = c7.ok ? await c7.json() : { dates: [] };
-    const entries = ensureArray<EntryItem>(e7.ok ? await e7.json() : []);
-    const emotions = ensureArray<EmotionRow>(em7.ok ? await em7.json() : []);
-    const entryDates = parseEntryDatesFromCalendar(
-      (calendarJson as { dates?: string[] }).dates,
-      viewYear,
-      viewMonth,
-    );
-    return {
-      entries,
-      emotions,
-      entryDates,
-      isFreeLimit: true,
-      viewMonth,
-      viewYear,
-    };
+  const moodsByEntry = new Map<string, string>();
+  for (const m of moodsRes.data ?? []) {
+    moodsByEntry.set(m.entry_id, m.value);
   }
 
-  if (entriesRes.ok && calendarRes.ok) {
-    const [entriesJson, calendarJson] = await Promise.all([
-      entriesRes.json(),
-      calendarRes.json(),
-    ]);
-    const emotionsJson = emotionsRes.ok ? await emotionsRes.json() : [];
-    const entryDates = parseEntryDatesFromCalendar(
-      (calendarJson as { dates?: string[] }).dates,
-      viewYear,
-      viewMonth,
-    );
+  const entries: EntryItem[] = entriesRows.map((e) => {
+    const plainBody = isEncryptionConfigured() ? decrypt(e.body) : e.body;
     return {
-      entries: ensureArray<EntryItem>(entriesJson),
-      emotions: ensureArray<EmotionRow>(emotionsJson),
-      entryDates,
-      isFreeLimit: false,
-      viewMonth,
-      viewYear,
+      id: e.id,
+      body: plainBody ?? "",
+      wordCount: (plainBody ?? "").length,
+      postedAt: e.posted_at,
+      createdAt: e.created_at,
+      mood: moodsByEntry.get(e.id) ?? null,
     };
+  });
+
+  const rawDates = entriesRows.map((r) =>
+    toYYYYMMDDFromUnknown((r as { posted_at: unknown }).posted_at),
+  );
+  const dates = [...new Set(rawDates.filter(Boolean))];
+  const entryDates = parseEntryDatesFromCalendar(
+    dates,
+    viewYear,
+    viewMonth,
+  );
+
+  const entryByPost = new Map(entriesRows.map((e) => [e.id, e.posted_at]));
+  const byDate = new Map<
+    string,
+    { date: string; mood: string | null; tags: string[] }
+  >();
+  for (const entry of entriesRows) {
+    const postedAt = entry.posted_at;
+    if (!byDate.has(postedAt)) {
+      byDate.set(postedAt, {
+        date: postedAt,
+        mood: moodsByEntry.get(entry.id) ?? null,
+        tags: [],
+      });
+    }
   }
+  for (const t of tagsRes.data ?? []) {
+    const postedAt = entryByPost.get(t.entry_id);
+    if (!postedAt) continue;
+    const row = byDate.get(postedAt);
+    if (row && !row.tags.includes(t.tag)) {
+      row.tags.push(t.tag);
+    }
+  }
+  const emotions: EmotionRow[] = [...byDate.entries()]
+    .sort((a, b) => b[0].localeCompare(a[0]))
+    .map(([, v]) => v);
 
   return {
-    entries: [],
-    emotions: [],
-    entryDates: [],
-    isFreeLimit: false,
+    entries,
+    emotions,
+    entryDates,
+    isFreeLimit,
     viewMonth,
     viewYear,
   };
 }
 
 /**
- * 履歴ページ用の初期データを取得。今月を要求し、403 時は直近7日にフォールバックする。
+ * 履歴ページ用の初期データを取得。今月を要求し、Free の場合は直近 7 日にフォールバックする。
  */
 export async function fetchHistoryInitialData(
-  baseUrl: string,
-  cookieHeader: string,
+  userId: string,
 ): Promise<HistoryInitialData> {
   const { year: viewYear, month: viewMonth } = getTodayPartsInTokyo();
   const fromParam = toYYYYMMDD(viewYear, viewMonth, 1);
   const lastDay = getDaysInMonth(viewMonth, viewYear);
   const toParam = toYYYYMMDD(viewYear, viewMonth, lastDay);
-  return fetchHistoryRangeData(baseUrl, cookieHeader, {
+  return fetchHistoryRangeData(userId, {
     from: fromParam,
     to: toParam,
     viewMonth,
