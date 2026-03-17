@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { signOut } from "next-auth/react";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
@@ -364,85 +365,22 @@ export function SettingsPage({
         </div>
       )}
 
-      {/* 解約・アカウント削除（ページ最下部） */}
-      <div className="rounded-xl border border-destructive/20 bg-card p-5 mb-6">
-        <h2 className="text-xs font-medium uppercase tracking-widest text-muted-foreground mb-4">
-          解約・退会
-        </h2>
-        <div className="space-y-3">
-          {plan === "deep" && (
-            <>
-              <button
-                type="button"
-                onClick={handlePortal}
-                disabled={portalLoading}
-                className="w-full flex items-center justify-between py-2 text-sm text-foreground hover:text-foreground/70 transition-colors cursor-pointer disabled:opacity-50"
-              >
-                Deepプランを解約する（Stripeポータル）
-                {portalLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />}
-              </button>
-              <Separator />
-            </>
-          )}
-          {!deleteConfirm ? (
-            <button
-              type="button"
-              onClick={() => setDeleteConfirm(true)}
-              className="w-full flex items-center justify-between py-2 text-sm text-destructive hover:text-destructive/70 transition-colors cursor-pointer"
-            >
-              退会する
-              <ArrowRight className="h-3.5 w-3.5" />
-            </button>
-          ) : (
-            <div className="space-y-3 py-2">
-              <p className="text-xs text-destructive">
-                退会するとこれまでのふりかえり・分析データの閲覧ができなくなります。本当に退会しますか？
-              </p>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={async () => {
-                    setDeleteLoading(true);
-                    try {
-                      const headers = await getApiHeaders();
-                      const res = await fetch("/api/v1/me/delete", {
-                        method: "DELETE",
-                        headers,
-                        credentials: "include",
-                      });
-                      if (res.ok) {
-                        window.location.href = "/goodbye";
-                      } else {
-                        setMessage({ type: "error", text: "退会に失敗しました。" });
-                        setDeleteConfirm(false);
-                      }
-                    } catch {
-                      setMessage({ type: "error", text: "退会に失敗しました。" });
-                      setDeleteConfirm(false);
-                    } finally {
-                      setDeleteLoading(false);
-                    }
-                  }}
-                  disabled={deleteLoading}
-                  className="rounded-lg bg-destructive text-destructive-foreground px-4 py-2 text-xs font-medium hover:bg-destructive/90 disabled:opacity-50 cursor-pointer"
-                >
-                  {deleteLoading ? "処理中…" : "退会する"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDeleteConfirm(false)}
-                  className="rounded-lg border border-border px-4 py-2 text-xs font-medium text-foreground hover:bg-accent cursor-pointer"
-                >
-                  キャンセル
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
+      {/* Logout (アカウント操作の中で独立した枠) */}
+      <div className="rounded-xl border border-border bg-card p-5 mb-6">
+        <button
+          type="button"
+          onClick={() => void signOut({ callbackUrl: "/" })}
+          className="w-full flex items-center justify-between py-2 text-sm text-foreground hover:text-foreground/70 transition-colors cursor-pointer"
+        >
+          <span className="flex items-center gap-2">
+            <LogOut className="h-4 w-4" />
+            ログアウトする
+          </span>
+        </button>
       </div>
 
-      {/* Footer */}
-      <div className="text-center py-4">
+      {/* Footer（特商法の次に解約・退会） */}
+      <div className="mt-10 border-t border-border pt-6 text-center">
         <p className="text-[10px] text-muted-foreground">
           Reflectが少しでもあなたの心の整理に役立ったら、ぜひご家族・ご友人におすすめしてくださると幸いです。
         </p>
@@ -460,8 +398,75 @@ export function SettingsPage({
             特定商取引法に基づく表記
           </Link>
         </p>
+
+        {/* 解約・退会リンク（お問い合わせなどと同じフッター内のテキストリンク） */}
+        <div className="mt-4 flex flex-wrap justify-center gap-x-4 gap-y-1 text-[10px]">
+          {plan === "deep" && (
+            <button
+              type="button"
+              onClick={handlePortal}
+              disabled={portalLoading}
+              className="text-[10px] text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors cursor-pointer disabled:opacity-50"
+            >
+              Deepプランを解約する（Stripeポータル）
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setDeleteConfirm(true)}
+            className="text-[10px] text-destructive hover:text-destructive/80 underline underline-offset-2 transition-colors cursor-pointer"
+          >
+            退会する
+          </button>
+        </div>
+        {deleteConfirm && (
+          <div className="mt-3 text-center">
+            <p className="text-[10px] text-destructive mb-2">
+              退会するとこれまでのふりかえり・分析データの閲覧ができなくなります。本当に退会しますか？
+            </p>
+            <div className="flex justify-center gap-2">
+              <button
+                type="button"
+                onClick={async () => {
+                  setDeleteLoading(true);
+                  try {
+                    const headers = await getApiHeaders();
+                    const res = await fetch("/api/v1/me/delete", {
+                      method: "DELETE",
+                      headers,
+                      credentials: "include",
+                    });
+                    if (res.ok) {
+                      window.location.href = "/goodbye";
+                    } else {
+                      setMessage({ type: "error", text: "退会に失敗しました。" });
+                      setDeleteConfirm(false);
+                    }
+                  } catch {
+                    setMessage({ type: "error", text: "退会に失敗しました。" });
+                    setDeleteConfirm(false);
+                  } finally {
+                    setDeleteLoading(false);
+                  }
+                }}
+                disabled={deleteLoading}
+                className="rounded-lg bg-destructive text-destructive-foreground px-4 py-1.5 text-[10px] font-medium hover:bg-destructive/90 disabled:opacity-50 cursor-pointer"
+              >
+                {deleteLoading ? "処理中…" : "退会する"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setDeleteConfirm(false)}
+                className="rounded-lg border border-border px-4 py-1.5 text-[10px] font-medium text-foreground hover:bg-accent cursor-pointer"
+              >
+                キャンセル
+              </button>
+            </div>
+          </div>
+        )}
+
         <p className="text-[10px] text-muted-foreground mt-8">
-          Reflect v1.0.0
+          Reflect v0.9.0
         </p>
         <p className="text-[10px] text-muted-foreground mt-2">
           Copyright © {new Date().getFullYear()} Reflect. All rights reserved.

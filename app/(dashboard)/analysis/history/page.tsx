@@ -1,5 +1,4 @@
 import { redirect } from "next/navigation";
-import { cookies } from "next/headers";
 import { auth } from "@/auth";
 import { AnalysisHistoryPage } from "@/components/analysis-history-page";
 import { fetchAnalysisHistoryInitialData } from "@/lib/fetch-analysis-history-initial-data";
@@ -19,13 +18,7 @@ export default async function AnalysisHistoryPageRoute() {
     redirect("/analysis");
   }
 
-  const baseUrl =
-    process.env.NEXTAUTH_URL ??
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
-  const cookieStore = await cookies();
-  const cookieHeader = cookieStore.getAll().map((c) => `${c.name}=${c.value}`).join("; ");
-
-  const initialData = await fetchAnalysisHistoryInitialData(baseUrl, cookieHeader);
+  const initialData = await fetchAnalysisHistoryInitialData(session.user.id);
 
   return <AnalysisHistoryPage initialData={initialData} />;
 }

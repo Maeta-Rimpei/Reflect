@@ -139,8 +139,9 @@ export function HistoryPage({
     ? emotions.find((e) => e.date === selectedPostedAt)?.tags ?? []
     : [];
 
-  /** 表示月を1つ前にする */
+  /** 表示月を1つ前にする（選択状態もリセット） */
   const goPrevMonth = () => {
+    setSelectedDate(null);
     if (viewMonth === 0) {
       setViewMonth(11);
       setViewYear((y) => y - 1);
@@ -149,8 +150,9 @@ export function HistoryPage({
     }
   };
 
-  /** 表示月を1つ後にする */
+  /** 表示月を1つ後にする（選択状態もリセット） */
   const goNextMonth = () => {
+    setSelectedDate(null);
     if (viewMonth === 11) {
       setViewMonth(0);
       setViewYear((y) => y + 1);

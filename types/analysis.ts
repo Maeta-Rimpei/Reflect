@@ -87,11 +87,21 @@ export interface AnalysisReportItem {
   createdAt: string;
 }
 
+/** 人格サマリー / 問いかけの履歴1件（period を持たない） */
+export interface AnalysisHistoryMiscItem {
+  id: string;
+  type: string;
+  payload: PersonalityData | { questions: string[] };
+  createdAt: string;
+}
+
 /** レポート履歴ページの初回表示用データ（サーバー取得） */
 export interface AnalysisHistoryInitialData {
   lists: {
     weekly: AnalysisReportItem[];
     monthly: AnalysisReportItem[];
     yearly: AnalysisReportItem[];
+    personality: AnalysisHistoryMiscItem[];
+    question: AnalysisHistoryMiscItem[];
   };
 }
