@@ -366,7 +366,7 @@ export function SettingsPage({
       )}
 
       {/* Logout (アカウント操作の中で独立した枠) */}
-      <div className="rounded-xl border border-border bg-card p-5 mb-6">
+      <div className="md:hidden rounded-xl border border-border bg-card p-5 mb-6">
         <button
           type="button"
           onClick={() => void signOut({ callbackUrl: "/" })}

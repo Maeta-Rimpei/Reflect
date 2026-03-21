@@ -14,6 +14,10 @@ import {
   getWeekRangeInTokyo,
 } from "@/lib/date-utils";
 import { logger } from "@/lib/logger";
+import {
+  getJournalRegenerationBLimit,
+  getJournalRegenerationBRemaining,
+} from "@/lib/quota-usage";
 import type {
   JournalAnalysis,
   JournalInitialData,
@@ -79,6 +83,9 @@ export async function fetchJournalInitialData(
     todayEntry: null,
     analysis: null,
     plan: "free",
+    hasDailyAnalysis: false,
+    journalRegenerationBRemaining: 0,
+    journalRegenerationBLimit: getJournalRegenerationBLimit(),
   };
 
   if (!isSupabaseAdminConfigured()) {
@@ -122,6 +129,7 @@ export async function fetchJournalInitialData(
     deepStreakRes,
     todayEntryRes,
     dailyAnalysisRes,
+    quotaRemaining,
   ] = await Promise.all([
     supabase
       .from("entries")
@@ -155,6 +163,7 @@ export async function fetchJournalInitialData(
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
+    getJournalRegenerationBRemaining(supabase, userId),
   ]);
 
   const [fy, fm, fd] = weekFrom.split("-").map(Number);
@@ -199,6 +208,7 @@ export async function fetchJournalInitialData(
       .limit(1)
       .maybeSingle();
     todayEntry = {
+      id: (todayRow as { id: string }).id,
       body: plainBody ?? "",
       mood: moodRow?.value ?? null,
     };
@@ -210,11 +220,18 @@ export async function fetchJournalInitialData(
     }
   }
 
+  const hasDailyAnalysis = Boolean(
+    todayRow && dailyAnalysisRes.data?.payload,
+  );
+
   return {
     weekDays,
     streakDates,
     todayEntry,
     analysis,
     plan,
+    hasDailyAnalysis,
+    journalRegenerationBRemaining: quotaRemaining,
+    journalRegenerationBLimit: getJournalRegenerationBLimit(),
   };
 }

@@ -5,7 +5,10 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { RippleMotif } from "@/components/ripple-motif";
 import { getApiHeaders } from "@/lib/api-auth";
-import { getCurrentStreak, getTodayInTokyo } from "@/lib/date-utils";
+import {
+  getCurrentStreak,
+  getTodayInTokyo,
+} from "@/lib/date-utils";
 import type {
   JournalAnalysis,
   JournalInitialData,
@@ -89,13 +92,24 @@ export function JournalPage({
   /** 今日のエントリ（保存済みの body / mood） */
   const [todayEntry, setTodayEntry] = useState<TodayEntry | null>(initialData.todayEntry ?? null);
   /** ユーザーのプラン（free / deep）。Deep なら週次・人格分析など表示 */
-  const [plan, setPlan] = useState<"free" | "deep">(initialData.plan);
+  const [plan] = useState<"free" | "deep">(initialData.plan);
+  /** DB に日次分析があるか（サーバー初回 + 保存・再試行で更新） */
+  const [hasDailyAnalysis, setHasDailyAnalysis] = useState(initialData.hasDailyAnalysis);
+  /** 種類 B（成功後の再分析）の今月残り */
+  const [journalRegenerationBRemaining, setJournalRegenerationBRemaining] = useState(
+    initialData.journalRegenerationBRemaining,
+  );
+  const journalRegenerationBLimit = initialData.journalRegenerationBLimit;
 
   const today = getTodayInTokyo();
   const streakDays = getCurrentStreak(today, datesWithEntries);
 
-  /** AI分析を再生成する（分析失敗時・未取得時の再試行用） */
-  const handleRetryAnalysis = async () => {
+  /** 日次分析を実行する（種類 A: 未取得救済。entryId 必須） */
+  const handleRetryAnalysisTypeA = async () => {
+    if (!todayEntry?.id) {
+      setAnalysisError("エントリー情報が取得できません。ページを再読み込みしてください。");
+      return;
+    }
     setIsRetrying(true);
     setAnalysisError(null);
     try {
@@ -104,21 +118,65 @@ export function JournalPage({
         method: "POST",
         headers: { ...headers, "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ type: "daily" }),
+        body: JSON.stringify({ type: "daily", entryId: todayEntry.id }),
       });
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
         setAnalysisError((errData as { message?: string }).message ?? "分析の再試行に失敗しました。");
         return;
       }
-      const data = (await res.json()) as { payload?: unknown };
+      const data = (await res.json()) as {
+        payload?: unknown;
+        regenerationBRemaining?: number;
+      };
       const next = normalizeAnalysis(data.payload);
       if (next) {
         setAnalysis(next);
+        setHasDailyAnalysis(true);
         setAnalysisError(null);
+        if (typeof data.regenerationBRemaining === "number") {
+          setJournalRegenerationBRemaining(data.regenerationBRemaining);
+        }
       }
     } catch {
       setAnalysisError("分析の再試行に失敗しました。");
+    } finally {
+      setIsRetrying(false);
+    }
+  };
+
+  /** 種類 B: 成功後の再分析（Deep・同一週・月次クォータ） */
+  const handleRetryAnalysisTypeB = async () => {
+    if (!todayEntry?.id) return;
+    setIsRetrying(true);
+    setAnalysisError(null);
+    try {
+      const headers = await getApiHeaders();
+      const res = await fetch("/api/v1/analysis/generate", {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ type: "daily", entryId: todayEntry.id }),
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        setAnalysisError((errData as { message?: string }).message ?? "再分析に失敗しました。");
+        return;
+      }
+      const data = (await res.json()) as {
+        payload?: unknown;
+        regenerationBRemaining?: number;
+      };
+      const next = normalizeAnalysis(data.payload);
+      if (next) {
+        setAnalysis(next);
+        setHasDailyAnalysis(true);
+        if (typeof data.regenerationBRemaining === "number") {
+          setJournalRegenerationBRemaining(data.regenerationBRemaining);
+        }
+      }
+    } catch {
+      setAnalysisError("再分析に失敗しました。");
     } finally {
       setIsRetrying(false);
     }
@@ -143,6 +201,7 @@ export function JournalPage({
       });
 
       const data = (await response.json().catch(() => ({}))) as {
+        id?: string;
         message?: string;
         dailyAnalysis?: unknown;
       };
@@ -157,7 +216,11 @@ export function JournalPage({
         return;
       }
 
-      setTodayEntry({ body: text.trim(), mood: selectedMood });
+      setTodayEntry({
+        id: typeof data.id === "string" ? data.id : "",
+        body: text.trim(),
+        mood: selectedMood,
+      });
       if (!hadEntryToday) {
         setDatesWithEntries((prev) => new Set([...prev, today]));
         setWeekDays((prev) => prev.map((d) => (d.today ? { ...d, done: true } : d)));
@@ -166,8 +229,10 @@ export function JournalPage({
       const next = normalizeAnalysis(data.dailyAnalysis);
       if (next) {
         setAnalysis(next);
+        setHasDailyAnalysis(true);
       } else {
         setAnalysis(null);
+        setHasDailyAnalysis(false);
         setAnalysisError("AI分析に失敗しました。しばらく経ってから再試行してください。");
       }
     } catch {
@@ -183,9 +248,19 @@ export function JournalPage({
   const charCount = text.length;
   /** 文字数割合（90%超で警告表示用） */
   const charPercentage = (charCount / MAX_CHARS) * 100;
-  /** 再試行ボタンを表示するか（エラーあり、または保存済みだが分析未取得かつ処理中でない） */
-  const showRetry =
-    analysisError || (!isAnalyzing && !isRetrying && !analysis && !!todayEntry);
+  /** 種類 A: 未取得救済の再試行 */
+  const showRetryTypeA =
+    analysisError ||
+    (!isAnalyzing && !isRetrying && !analysis && !!todayEntry?.id);
+  /** 種類 B: 分析取得済みで Deep のみ・クォータ残あり */
+  const showRetryTypeB =
+    !isAnalyzing &&
+    !isRetrying &&
+    !!analysis &&
+    plan === "deep" &&
+    hasDailyAnalysis &&
+    journalRegenerationBRemaining > 0 &&
+    !!todayEntry?.id;
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-8 md:px-6 md:py-12">
@@ -422,20 +497,51 @@ export function JournalPage({
               </p>
             )}
 
-            {showRetry && (
+            {showRetryTypeA && (
               <div className="mt-4">
                 {analysisError && (
                   <p className="text-xs text-red-600 mb-3">{analysisError}</p>
                 )}
                 <button
                   type="button"
-                  onClick={handleRetryAnalysis}
+                  onClick={handleRetryAnalysisTypeA}
                   disabled={isRetrying}
                   className="rounded-lg border border-foreground/20 bg-foreground/5 px-4 py-2 text-xs font-medium text-foreground transition-colors hover:bg-foreground/10 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isRetrying ? "分析中…" : "AI分析を再試行する"}
                 </button>
               </div>
+            )}
+
+            {showRetryTypeB && (
+              <div className="mt-4 space-y-2">
+                {analysisError && (
+                  <p className="text-xs text-red-600">{analysisError}</p>
+                )}
+                <p className="text-[10px] text-muted-foreground">
+                  成功後の再分析（今月あと {journalRegenerationBRemaining} / {journalRegenerationBLimit} 回）
+                </p>
+                <button
+                  type="button"
+                  onClick={handleRetryAnalysisTypeB}
+                  disabled={isRetrying}
+                  className="rounded-lg border border-foreground/30 bg-foreground/10 px-4 py-2 text-xs font-medium text-foreground transition-colors hover:bg-foreground/15 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isRetrying ? "分析中…" : "日次分析をやり直す（Deep）"}
+                </button>
+              </div>
+            )}
+
+            {plan === "free" && hasDailyAnalysis && analysis && !showRetryTypeB && (
+              <p className="mt-4 text-[10px] text-muted-foreground">
+                分析のやり直しは Deep プランで利用できます（今月の回数制限あり）。
+              </p>
+            )}
+
+            {plan === "deep" && hasDailyAnalysis && analysis && journalRegenerationBRemaining === 0 && (
+              <p className="mt-4 text-[10px] text-muted-foreground">
+                今月の「成功後の再分析」は上限に達しました。来月から再度お試しください。
+              </p>
             )}
           </div>
 

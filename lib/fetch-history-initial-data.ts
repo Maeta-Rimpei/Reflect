@@ -11,7 +11,12 @@ import {
   getLast7DaysRangeInTokyo,
   getNextDay,
   getTodayPartsInTokyo,
+  toYmdInTokyo,
 } from "@/lib/date-utils";
+import {
+  getJournalRegenerationBLimit,
+  getJournalRegenerationBRemaining,
+} from "@/lib/quota-usage";
 import type { EntryItem, EmotionRow, HistoryInitialData } from "@/types/entry";
 
 function getDaysInMonth(month: number, year: number): number {
@@ -80,6 +85,9 @@ export async function fetchHistoryRangeData(
     isFreeLimit: false,
     viewMonth,
     viewYear,
+    plan: "free" as const,
+    journalRegenerationBRemaining: 0,
+    journalRegenerationBLimit: getJournalRegenerationBLimit(),
   };
 
   if (!isSupabaseAdminConfigured()) {
@@ -95,6 +103,11 @@ export async function fetchHistoryRangeData(
     .single();
   const plan: "free" | "deep" =
     profile?.plan === "deep" || profile?.plan === "free" ? profile.plan : "free";
+
+  const journalRegenerationBRemaining = await getJournalRegenerationBRemaining(
+    supabase,
+    userId,
+  );
 
   const fromDate = new Date(fromParam);
   const toDate = new Date(toParam);
@@ -120,11 +133,14 @@ export async function fetchHistoryRangeData(
     return {
       ...empty,
       isFreeLimit,
+      plan,
+      journalRegenerationBRemaining,
+      journalRegenerationBLimit: getJournalRegenerationBLimit(),
     };
   }
 
   const entryIds = entriesRows.map((e) => e.id);
-  const [moodsRes, tagsRes] = await Promise.all([
+  const [moodsRes, tagsRes, dailyRes] = await Promise.all([
     supabase
       .from("moods")
       .select("entry_id, value")
@@ -136,7 +152,22 @@ export async function fetchHistoryRangeData(
       .eq("user_id", userId)
       .in("entry_id", entryIds)
       .order("created_at", { ascending: true }),
+    supabase
+      .from("analysis_results")
+      .select("period_from, payload")
+      .eq("user_id", userId)
+      .eq("type", "daily")
+      .gte("period_from", actualFrom)
+      .lte("period_from", actualTo),
   ]);
+
+  const dailyByYmd = new Map<string, Record<string, unknown>>();
+  for (const r of dailyRes.data ?? []) {
+    const ymd = String((r as { period_from: string }).period_from).slice(0, 10);
+    if (!dailyByYmd.has(ymd) && r.payload) {
+      dailyByYmd.set(ymd, r.payload as Record<string, unknown>);
+    }
+  }
 
   const moodsByEntry = new Map<string, string>();
   for (const m of moodsRes.data ?? []) {
@@ -145,6 +176,8 @@ export async function fetchHistoryRangeData(
 
   const entries: EntryItem[] = entriesRows.map((e) => {
     const plainBody = isEncryptionConfigured() ? decrypt(e.body) : e.body;
+    const ymd = toYmdInTokyo(e.posted_at);
+    const raw = dailyByYmd.get(ymd);
     return {
       id: e.id,
       body: plainBody ?? "",
@@ -152,6 +185,18 @@ export async function fetchHistoryRangeData(
       postedAt: e.posted_at,
       createdAt: e.created_at,
       mood: moodsByEntry.get(e.id) ?? null,
+      hasDailyAnalysis: dailyByYmd.has(ymd),
+      dailyAnalysis: raw
+        ? {
+            summary: typeof raw.summary === "string" ? raw.summary : "",
+            primaryEmotion: typeof raw.primaryEmotion === "string" ? raw.primaryEmotion : "",
+            secondaryEmotion: typeof raw.secondaryEmotion === "string" ? raw.secondaryEmotion : "",
+            thoughtPatterns: Array.isArray(raw.thoughtPatterns) ? raw.thoughtPatterns.map(String) : [],
+            tension: typeof raw.tension === "string" ? raw.tension : "",
+            metaInsight: typeof raw.metaInsight === "string" ? raw.metaInsight : "",
+            question: typeof raw.question === "string" ? raw.question : "",
+          }
+        : null,
     };
   });
 
@@ -199,6 +244,9 @@ export async function fetchHistoryRangeData(
     isFreeLimit,
     viewMonth,
     viewYear,
+    plan,
+    journalRegenerationBRemaining,
+    journalRegenerationBLimit: getJournalRegenerationBLimit(),
   };
 }
 

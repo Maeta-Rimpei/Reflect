@@ -246,3 +246,31 @@ export function getPeriodLabel(item: {
   }
   return formatYearJp(to);
 }
+
+/**
+ * DB の posted_at 等を東京日付の YYYY-MM-DD に正規化する。
+ */
+export function toYmdInTokyo(input: string | Date): string {
+  if (typeof input === "string" && /^\d{4}-\d{2}-\d{2}/.test(input)) {
+    return input.slice(0, 10);
+  }
+  const d = typeof input === "string" ? new Date(input) : input;
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("en-CA", { timeZone: TZ_TOKYO });
+}
+
+/**
+ * 東京の「今日」と同一暦週（月曜始まり）に ymd が含まれるか。
+ */
+export function isYmdInCurrentWeekTokyo(ymd: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return false;
+  const { from, to } = getWeekRangeInTokyo();
+  return ymd >= from && ymd <= to;
+}
+
+/**
+ * 東京の暦月 YYYY-MM（クォータの period 用）。
+ */
+export function getYearMonthInTokyo(): string {
+  return getTodayInTokyo().slice(0, 7);
+}

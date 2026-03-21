@@ -14,7 +14,17 @@ import {
 } from "@/lib/gemini";
 import { decrypt, isEncryptionConfigured } from "@/lib/crypto";
 import { logger } from "@/lib/logger";
-import { getLast12MonthsRangeInTokyo } from "@/lib/date-utils";
+import {
+  getLast12MonthsRangeInTokyo,
+  isYmdInCurrentWeekTokyo,
+  toYmdInTokyo,
+} from "@/lib/date-utils";
+import {
+  getJournalRegenerationBLimit,
+  getJournalRegenerationBRemaining,
+  getJournalRegenerationBUsed,
+  incrementJournalRegenerationB,
+} from "@/lib/quota-usage";
 import { truncateCommentForSummary } from "@/lib/string-utils";
 import { PROMPT_VERSIONS } from "@/lib/prompt-versions";
 
@@ -51,6 +61,8 @@ export async function POST(req: NextRequest) {
       type?: string;
       from?: string;
       to?: string;
+      /** 日次再分析の対象エントリー（同一暦週内）。省略時は今日のエントリーを探す */
+      entryId?: string;
     } | null;
 
     const type = body?.type;
@@ -67,9 +79,9 @@ export async function POST(req: NextRequest) {
 
     const supabase = createSupabaseAdminClient();
 
-    // ── デイリー分析リトライ（全プラン利用可） ──
+    // ── デイリー分析（種類 A: 未取得救済 / 種類 B: 成功後の再分析・Deep・月次クォータ） ──
     if (type === "daily") {
-      return await retryJournalAnalysis(supabase, userId);
+      return await retryJournalAnalysis(supabase, userId, body?.entryId);
     }
 
     const { data: profile } = await supabase
@@ -549,50 +561,136 @@ async function checkCooldown(
 }
 
 /**
- * ジャーナル分析リトライ: 今日のエントリーに対して分析を再実行
+ * ジャーナル日次分析: 種類 A（未取得）または B（成功後・Deep・同一暦週・月3回まで）
  */
 async function retryJournalAnalysis(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any,
   userId: string,
+  entryId?: string,
 ) {
-  const postedAt = new Date().toLocaleDateString("en-CA", {
+  const todayYmd = new Date().toLocaleDateString("en-CA", {
     timeZone: "Asia/Tokyo",
   });
 
-  const { data: entry } = await supabase
-    .from("entries")
-    .select("id, body")
-    .eq("user_id", userId)
-    .eq("posted_at", postedAt)
-    .limit(1)
-    .maybeSingle();
+  let entry: { id: string; body: string; posted_at: string } | null = null;
+
+  if (entryId) {
+    const { data } = await supabase
+      .from("entries")
+      .select("id, body, posted_at")
+      .eq("user_id", userId)
+      .eq("id", entryId)
+      .maybeSingle();
+    entry = data;
+  } else {
+    const { data } = await supabase
+      .from("entries")
+      .select("id, body, posted_at")
+      .eq("user_id", userId)
+      .eq("posted_at", todayYmd)
+      .limit(1)
+      .maybeSingle();
+    entry = data;
+  }
 
   if (!entry) {
     return NextResponse.json(
-      { error: "not_found", message: "今日のエントリーが見つかりません。" },
+      {
+        error: "not_found",
+        message: entryId
+          ? "指定のエントリーが見つかりません。"
+          : "今日のエントリーが見つかりません。",
+      },
       { status: 404 },
     );
   }
 
+  const dayYmd = toYmdInTokyo(entry.posted_at);
+
+  if (!isYmdInCurrentWeekTokyo(dayYmd)) {
+    return NextResponse.json(
+      {
+        error: "week_out",
+        message:
+          "今週（月曜始まり・東京）のふりかえりのみ、日次分析の取得・やり直しができます。",
+      },
+      { status: 403 },
+    );
+  }
+
+  const { data: existingDaily } = await supabase
+    .from("analysis_results")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("type", "daily")
+    .eq("period_from", dayYmd)
+    .eq("period_to", dayYmd)
+    .limit(1)
+    .maybeSingle();
+
+  const hasPersistedDaily = Boolean(existingDaily);
+
+  let regenerationKind: "A" | "B";
+  if (!hasPersistedDaily) {
+    regenerationKind = "A";
+  } else {
+    regenerationKind = "B";
+    const { data: profile } = await supabase
+      .from("users")
+      .select("plan")
+      .eq("id", userId)
+      .single();
+    const plan = profile?.plan === "deep" ? "deep" : "free";
+    if (plan !== "deep") {
+      return NextResponse.json(
+        {
+          error: "plan_limit",
+          message:
+            "分析がすでに取得済みの日をやり直すのは Deep プランのみです。",
+        },
+        { status: 403 },
+      );
+    }
+    const used = await getJournalRegenerationBUsed(supabase, userId);
+    const limit = getJournalRegenerationBLimit();
+    if (used >= limit) {
+      return NextResponse.json(
+        {
+          error: "quota_exceeded",
+          message: `今月の「成功後の再分析」は ${limit} 回までです。来月以降に再度お試しください。`,
+        },
+        { status: 429 },
+      );
+    }
+  }
+
   const plainBody = isEncryptionConfigured() ? decrypt(entry.body) : entry.body;
 
-  const result = await generateJournalAnalysis(plainBody);
+  let result: Awaited<ReturnType<typeof generateJournalAnalysis>>;
+  try {
+    result = await generateJournalAnalysis(plainBody);
+  } catch (e) {
+    logger.errorException("[analysis/generate] 日次ジャーナル分析でエラー", e);
+    return NextResponse.json(
+      { error: "internal", message: "分析の生成に失敗しました。" },
+      { status: 500 },
+    );
+  }
 
-  // 既存の daily 分析があれば削除してから再挿入
   await supabase
     .from("analysis_results")
     .delete()
     .eq("user_id", userId)
     .eq("type", "daily")
-    .eq("period_from", postedAt)
-    .eq("period_to", postedAt);
+    .eq("period_from", dayYmd)
+    .eq("period_to", dayYmd);
 
   await supabase.from("analysis_results").insert({
     user_id: userId,
     type: "daily",
-    period_from: postedAt,
-    period_to: postedAt,
+    period_from: dayYmd,
+    period_to: dayYmd,
     prompt_version: PROMPT_VERSIONS.daily,
     payload: {
       summary: result.summary,
@@ -605,6 +703,14 @@ async function retryJournalAnalysis(
     },
   });
 
+  if (regenerationKind === "B") {
+    try {
+      await incrementJournalRegenerationB(supabase, userId);
+    } catch (e) {
+      logger.errorException("[analysis/generate] 種類Bクォータ更新でエラー", e);
+    }
+  }
+
   await supabase.from("emotion_tags").delete().eq("entry_id", entry.id);
   for (const tag of [result.primaryEmotion, result.secondaryEmotion]) {
     if (!tag || !tag.trim()) continue;
@@ -615,8 +721,16 @@ async function retryJournalAnalysis(
     });
   }
 
+  const regenerationBRemaining = await getJournalRegenerationBRemaining(
+    supabase,
+    userId,
+  );
+
   return NextResponse.json({
     type: "daily",
+    regenerationKind,
+    regenerationBRemaining,
+    regenerationBLimit: getJournalRegenerationBLimit(),
     payload: {
       summary: result.summary,
       primaryEmotion: result.primaryEmotion,

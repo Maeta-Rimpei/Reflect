@@ -5,6 +5,8 @@ export interface JournalAnalysis extends GeminiJournalAnalysisPayload {}
 
 /** 今日のふりかえりエントリー（保存済み表示用） */
 export interface TodayEntry {
+  /** エントリー ID（再分析 API 等） */
+  id: string;
   /** 本文 */
   body: string;
   /** 選択した気分（great / good / neutral / low / bad） */
@@ -29,4 +31,10 @@ export interface JournalInitialData {
   todayEntry: TodayEntry | null;
   analysis: JournalAnalysis | null;
   plan: "free" | "deep";
+  /** DB に日次分析が保存されているか（種類 A / B の表示分岐） */
+  hasDailyAnalysis: boolean;
+  /** 種類 B（成功後の再分析）の今月残り回数（東京暦月） */
+  journalRegenerationBRemaining: number;
+  /** 種類 B の月あたり上限 */
+  journalRegenerationBLimit: number;
 }

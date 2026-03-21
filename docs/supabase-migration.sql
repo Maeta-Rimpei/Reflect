@@ -111,6 +111,22 @@ CREATE TABLE IF NOT EXISTS public.contact_requests (
 
 CREATE INDEX IF NOT EXISTS idx_contact_requests_created ON public.contact_requests (created_at DESC);
 
+-- quota_usage: 機能別の利用回数（ユーザー × 集計期間 × キー）
+-- 例: quota_key = 'journal_daily_regeneration_b' … Deep 向け「成功後の日次再分析」の月次上限（東京暦月 YYYY-MM を period に格納）
+-- 将来ほかの制限も quota_key を増やして同一テーブルで扱う。
+CREATE TABLE IF NOT EXISTS public.quota_usage (
+  user_id TEXT NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  quota_key TEXT NOT NULL,
+  period TEXT NOT NULL,
+  used_count INTEGER NOT NULL DEFAULT 0 CHECK (used_count >= 0),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id, quota_key, period)
+);
+
+COMMENT ON TABLE public.quota_usage IS 'ユーザーごとのクォータ消費回数。period の意味は quota_key ごとに定義（例: 東京暦月 YYYY-MM）。';
+COMMENT ON COLUMN public.quota_usage.quota_key IS '制限の種類。例: journal_daily_regeneration_b = 日次ふりかえり成功後の再分析（種類B）';
+COMMENT ON COLUMN public.quota_usage.period IS '集計期間キー。当面は東京の暦月 YYYY-MM。';
+
 -- ---------------------------------------------------------------------------
 -- 2. 既存テーブルへの追加カラム（既存DBでテーブルが先に作られている場合用）
 -- ---------------------------------------------------------------------------
@@ -130,6 +146,7 @@ ALTER TABLE public.emotion_tags ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.subscriptions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.magic_link_tokens ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.contact_requests ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.quota_usage ENABLE ROW LEVEL SECURITY;
 
 -- ---------------------------------------------------------------------------
 -- 4. ポリシー（存在しなければ作成＝冪等）
@@ -160,5 +177,8 @@ BEGIN
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'contact_requests' AND policyname = 'contact_requests_server_only') THEN
     CREATE POLICY "contact_requests_server_only" ON public.contact_requests FOR ALL USING (false);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'quota_usage' AND policyname = 'quota_usage_server_only') THEN
+    CREATE POLICY "quota_usage_server_only" ON public.quota_usage FOR ALL USING (false);
   END IF;
 END $$;

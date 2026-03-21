@@ -1,6 +1,6 @@
 /**
  * 感情ログページの初回表示用データをサーバー側で取得する。
- * Supabase を直接利用する。
+ * Supabase を直接利用し、自 API への HTTP 呼び出しを行わない。
  */
 import {
   createSupabaseAdminClient,
@@ -11,7 +11,7 @@ import type { EmotionsInitialData } from "@/types/emotions";
 import type { EmotionRow } from "@/types/entry";
 
 /**
- * 直近7日の感情ログを取得する。
+ * 直近7日分の感情ログ（日付ごとの気分・感情タグ）を取得する。
  * @param userId - 認証済みユーザー ID
  */
 export async function fetchEmotionsInitialData(
@@ -24,6 +24,7 @@ export async function fetchEmotionsInitialData(
   const { from, to } = getLast7DaysRangeInTokyo();
   const supabase = createSupabaseAdminClient();
 
+  // 直近7日以内に投稿されたエントリ ID を取得（posted_at は timestamptz のため lt(getNextDay(to)) で末日を含める）
   const { data: entriesInRange } = await supabase
     .from("entries")
     .select("id, posted_at")
@@ -36,6 +37,7 @@ export async function fetchEmotionsInitialData(
     return { emotionLog: [] };
   }
 
+  // 感情タグと気分を並列取得（entry_id で絞り込み）
   const [tagsRes, moodsRes] = await Promise.all([
     supabase
       .from("emotion_tags")
@@ -50,6 +52,7 @@ export async function fetchEmotionsInitialData(
       .in("entry_id", entryIds),
   ]);
 
+  // entry_id → posted_at（日付キーで集約するため）
   const entryByPost = new Map(
     (entriesInRange ?? []).map((e) => [e.id, e.posted_at]),
   );
@@ -58,6 +61,7 @@ export async function fetchEmotionsInitialData(
     moodsByEntry.set(m.entry_id, m.value);
   }
 
+  // 日付ごとに { date, mood, tags } を組み立て（1日1エントリ想定）
   const byDate = new Map<
     string,
     { date: string; mood: string | null; tags: string[] }
@@ -81,6 +85,7 @@ export async function fetchEmotionsInitialData(
     }
   }
 
+  // 新しい日付が先頭になるようソートして配列化
   const emotionLog: EmotionRow[] = [...byDate.entries()]
     .sort((a, b) => b[0].localeCompare(a[0]))
     .map(([, v]) => v);

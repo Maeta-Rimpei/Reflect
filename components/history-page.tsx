@@ -4,7 +4,11 @@ import { useState, useEffect } from "react";
 import { ChevronLeft, ChevronRight, Lock, Laugh, Smile, Meh, Frown, HeartCrack } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getApiHeaders } from "@/lib/api-auth";
-import { getTodayPartsInTokyo } from "@/lib/date-utils";
+import {
+  getTodayPartsInTokyo,
+  isYmdInCurrentWeekTokyo,
+  toYmdInTokyo,
+} from "@/lib/date-utils";
 import type { EntryItem, EmotionRow, HistoryInitialData } from "@/types/entry";
 
 /** 曜日ラベル（日〜土） */
@@ -27,6 +31,9 @@ const MOOD_COLOR: Record<string, string> = {
   low: "bg-foreground/20",
   bad: "bg-foreground/10",
 };
+
+/** 本文の最大文字数（Free プラン・ジャーナルと同様） */
+const MAX_BODY_FREE = 800;
 
 /** 指定年月の日数を返す（0-indexed month） */
 function getDaysInMonth(month: number, year: number) {
@@ -70,6 +77,28 @@ export function HistoryPage({
   const [loading, setLoading] = useState(!initialData);
   /** Free プランで 7 日制限がかかっているか（true のとき直近7日のみ表示） */
   const [isFreeLimit, setIsFreeLimit] = useState(initialData?.isFreeLimit ?? false);
+  const [plan, setPlan] = useState<"free" | "deep">(initialData?.plan ?? "free");
+  const [journalRegenerationBRemaining, setJournalRegenerationBRemaining] = useState(
+    initialData?.journalRegenerationBRemaining ?? 0,
+  );
+  const [journalRegenerationBLimit, setJournalRegenerationBLimit] = useState(
+    initialData?.journalRegenerationBLimit ?? 3,
+  );
+
+  /** 編集モーダル */
+  const [editOpen, setEditOpen] = useState(false);
+  const [editBody, setEditBody] = useState("");
+  const [editMood, setEditMood] = useState<string | null>(null);
+  /** 保存処理中の種別（押したボタンだけ「中…」表示にする） */
+  const [editSubmitMode, setEditSubmitMode] = useState<
+    "idle" | "save" | "saveAndReanalyze"
+  >("idle");
+  /** 再分析: 確認 / 不可の説明（編集ダイアログより前面） */
+  const [reanalyzeModal, setReanalyzeModal] = useState<
+    "closed" | "confirm" | "blocked"
+  >("closed");
+  const [editError, setEditError] = useState<string | null>(null);
+  const [genMessage, setGenMessage] = useState<string | null>(null);
 
   /** API の from パラメータ（表示月の1日） */
   const fromParam = toYYYYMMDD(viewYear, viewMonth, 1);
@@ -87,6 +116,9 @@ export function HistoryPage({
       setEmotions(initialData.emotions ?? []);
       setEntryDates(new Set(initialData.entryDates ?? []));
       setIsFreeLimit(initialData.isFreeLimit ?? false);
+      setPlan(initialData.plan ?? "free");
+      setJournalRegenerationBRemaining(initialData.journalRegenerationBRemaining ?? 0);
+      setJournalRegenerationBLimit(initialData.journalRegenerationBLimit ?? 3);
       return;
     }
 
@@ -107,6 +139,9 @@ export function HistoryPage({
         setEmotions(data.emotions ?? []);
         setEntryDates(new Set(data.entryDates ?? []));
         setIsFreeLimit(data.isFreeLimit ?? false);
+        setPlan(data.plan ?? "free");
+        setJournalRegenerationBRemaining(data.journalRegenerationBRemaining ?? 0);
+        setJournalRegenerationBLimit(data.journalRegenerationBLimit ?? 3);
       })
       .catch(() => {
         if (!cancelled) {
@@ -133,13 +168,18 @@ export function HistoryPage({
   const selectedPostedAt =
     selectedDate != null ? toYYYYMMDD(viewYear, viewMonth, selectedDate) : null;
   /** 選択日に対応するエントリ（本文・気分表示用） */
-  const selectedEntry = selectedPostedAt ? entries.find((e) => e.postedAt === selectedPostedAt) : null;
+  const selectedEntry = selectedPostedAt
+    ? entries.find((e) => toYmdInTokyo(e.postedAt) === selectedPostedAt)
+    : null;
   /** 選択日の感情テキスト（AI 分析の主・補など、文章で返る） */
   const selectedEmotions = selectedPostedAt
-    ? emotions.find((e) => e.date === selectedPostedAt)?.tags ?? []
+    ? emotions.find((e) => toYmdInTokyo(e.date) === selectedPostedAt)?.tags ?? []
     : [];
 
-  /** 表示月を1つ前にする（選択状態もリセット） */
+  /**
+   * 表示月を1つ前にする（選択状態もリセット）
+   * @returns 月表示
+   */
   const goPrevMonth = () => {
     setSelectedDate(null);
     if (viewMonth === 0) {
@@ -150,7 +190,10 @@ export function HistoryPage({
     }
   };
 
-  /** 表示月を1つ後にする（選択状態もリセット） */
+  /**
+   * 表示月を1つ後にする（選択状態もリセット）
+   * @returns 月表示
+   */
   const goNextMonth = () => {
     setSelectedDate(null);
     if (viewMonth === 11) {
@@ -161,16 +204,241 @@ export function HistoryPage({
     }
   };
 
-  /** ヘッダーに表示する「Y年M月」（東京タイムゾーンで表示） */
+  /**
+   * ヘッダーに表示する「Y年M月」（東京タイムゾーンで表示）
+   * @returns 月表示
+   */
   const monthLabel = new Date(viewYear, viewMonth, 1).toLocaleDateString("ja-JP", {
     month: "numeric",
     year: "numeric",
     timeZone: "Asia/Tokyo",
   });
 
-  /** 指定日付の気分を取得（emotions 優先、なければ selectedEntry の mood） */
+  /**
+   * 指定日付の気分を取得（emotions 優先、なければ selectedEntry の mood）
+   * @param dateStr 日付（YYYY-MM-DD）
+   * @returns 気分
+   */
   const moodForDate = (dateStr: string) =>
-    emotions.find((e) => e.date === dateStr)?.mood ?? selectedEntry?.mood ?? null;
+    emotions.find((e) => toYmdInTokyo(e.date) === dateStr)?.mood ??
+    selectedEntry?.mood ??
+    null;
+
+  const selectedYmd = selectedEntry ? toYmdInTokyo(selectedEntry.postedAt) : "";
+  const inThisWeek = selectedYmd ? isYmdInCurrentWeekTokyo(selectedYmd) : false;
+  const showDailyRegenA =
+    Boolean(selectedEntry) && inThisWeek && selectedEntry && !selectedEntry.hasDailyAnalysis;
+  const showDailyRegenB =
+    Boolean(selectedEntry) &&
+    inThisWeek &&
+    selectedEntry &&
+    selectedEntry.hasDailyAnalysis &&
+    plan === "deep" &&
+    journalRegenerationBRemaining > 0;
+
+  /** 今週かつ、種類 A（未取得）または種類 B（Deep・枠あり）で再分析可能 */
+  const canSaveAndReanalyze = showDailyRegenA || showDailyRegenB;
+
+  const saveAndReanalyzeDisabledReason = selectedEntry
+    ? !inThisWeek
+      ? "今週（月曜始まり）のふりかえりのみ再分析できます。"
+      : selectedEntry.hasDailyAnalysis && plan === "free"
+        ? "分析のやり直しには Deep プランが必要です。"
+        : selectedEntry.hasDailyAnalysis &&
+            plan === "deep" &&
+            journalRegenerationBRemaining === 0
+          ? "今月の再分析の上限に達しています。"
+          : null
+    : null;
+
+  const openEditModal = () => {
+    if (!selectedEntry) return;
+    setEditBody(selectedEntry.body);
+    setEditMood(selectedEntry.mood);
+    setEditError(null);
+    setGenMessage(null);
+    setReanalyzeModal("closed");
+    setEditOpen(true);
+  };
+
+  /** 再分析が不可なときの説明（回数上限時も同じトーン） */
+  const reanalyzeBlockedContent = selectedEntry
+    ? !inThisWeek
+      ? {
+          title: "再分析できません",
+          lines: [
+            "一度の振り返りとしっかり向き合うため、再分析は今週の記録に限ります。",
+            "今週（月曜始まり・東京）のふりかえりのみ、再分析を実行できます。",
+          ],
+        }
+      : selectedEntry.hasDailyAnalysis && plan === "free"
+        ? {
+            title: "再分析できません",
+            lines: [
+              "一度の振り返りとしっかり向き合うため、回数に制限があります（Deep プラン向け）。",
+              "分析のやり直しには Deep プランが必要です。",
+            ],
+          }
+        : selectedEntry.hasDailyAnalysis &&
+            plan === "deep" &&
+            journalRegenerationBRemaining === 0
+          ? {
+              title: "再分析できません",
+              lines: [
+                "一度の振り返りとしっかり向き合うため、回数に制限があります。",
+                `今月の再分析は上限（${journalRegenerationBLimit} 回）に達しました。今月はこれ以上実行できません。`,
+              ],
+            }
+          : {
+              title: "再分析できません",
+              lines: [saveAndReanalyzeDisabledReason ?? "再分析できません。"],
+            }
+    : null;
+
+  const onClickReanalyzeInEdit = () => {
+    if (!editMood?.trim()) return;
+    if (!canSaveAndReanalyze) {
+      setReanalyzeModal("blocked");
+      return;
+    }
+    setReanalyzeModal("confirm");
+  };
+
+  /**
+   * 日次分析 API を実行（保存後に続けて呼ぶ想定）
+   */
+  const runDailyRegenerateAfterSave = async (entryId: string, ymd: string) => {
+    const headers = await getApiHeaders();
+    const res = await fetch("/api/v1/analysis/generate", {
+      method: "POST",
+      headers: { ...headers, "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ type: "daily", entryId }),
+    });
+    const data = (await res.json().catch(() => ({}))) as {
+      message?: string;
+      payload?: {
+        summary?: string;
+        primaryEmotion?: string;
+        secondaryEmotion?: string;
+        thoughtPatterns?: string[];
+        tension?: string;
+        metaInsight?: string;
+        question?: string;
+      };
+      regenerationBRemaining?: number;
+    };
+    if (!res.ok) {
+      throw new Error(data.message ?? "分析に失敗しました。");
+    }
+    const p = data.payload;
+    const tags = [p?.primaryEmotion, p?.secondaryEmotion].filter(
+      (t): t is string => Boolean(t && String(t).trim()),
+    );
+    const nextAnalysis = p
+      ? {
+          summary: p.summary ?? "",
+          primaryEmotion: p.primaryEmotion ?? "",
+          secondaryEmotion: p.secondaryEmotion ?? "",
+          thoughtPatterns: p.thoughtPatterns ?? [],
+          tension: p.tension ?? "",
+          metaInsight: p.metaInsight ?? "",
+          question: p.question ?? "",
+        }
+      : null;
+    setEntries((prev) =>
+      prev.map((e) =>
+        e.id === entryId
+          ? { ...e, hasDailyAnalysis: true, dailyAnalysis: nextAnalysis }
+          : e,
+      ),
+    );
+    setEmotions((prev) =>
+      prev.map((em) =>
+        toYmdInTokyo(em.date) === ymd ? { ...em, tags } : em,
+      ),
+    );
+    if (typeof data.regenerationBRemaining === "number") {
+      setJournalRegenerationBRemaining(data.regenerationBRemaining);
+    }
+  };
+
+  /**
+   * @param withReanalyze - true のとき保存成功後に日次分析を実行
+   */
+  const saveEdit = async (withReanalyze: boolean) => {
+    if (!selectedEntry || !editMood?.trim()) {
+      setEditError("気分を選んでください。");
+      return;
+    }
+    if (withReanalyze && !canSaveAndReanalyze) {
+      setEditError(saveAndReanalyzeDisabledReason ?? "再分析できません。");
+      return;
+    }
+    let body = editBody.trim();
+    if (plan === "free" && body.length > MAX_BODY_FREE) {
+      setEditError(`本文は ${MAX_BODY_FREE} 文字以内にしてください。`);
+      return;
+    }
+    setEditSubmitMode(withReanalyze ? "saveAndReanalyze" : "save");
+    setEditError(null);
+    setGenMessage(null);
+    if (withReanalyze) setReanalyzeModal("closed");
+    const entryId = selectedEntry.id;
+    const ymd = selectedYmd;
+    try {
+      const headers = await getApiHeaders();
+      const res = await fetch(`/api/v1/entries/${entryId}`, {
+        method: "PATCH",
+        headers: { ...headers, "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ body, mood: editMood.trim() }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        message?: string;
+        body?: string;
+        mood?: string | null;
+      };
+      if (!res.ok) {
+        setEditError(data.message ?? "保存に失敗しました。");
+        return;
+      }
+      const nextBody = typeof data.body === "string" ? data.body : body;
+      const nextMood = data.mood !== undefined ? data.mood : editMood.trim();
+      setEntries((prev) =>
+        prev.map((e) =>
+          e.id === entryId
+            ? {
+                ...e,
+                body: nextBody,
+                mood: nextMood,
+                wordCount: nextBody.length,
+              }
+            : e,
+        ),
+      );
+      setEmotions((prev) =>
+        prev.map((em) =>
+          toYmdInTokyo(em.date) === ymd ? { ...em, mood: nextMood } : em,
+        ),
+      );
+
+      if (withReanalyze) {
+        try {
+          await runDailyRegenerateAfterSave(entryId, ymd);
+        } catch (e) {
+          setGenMessage(e instanceof Error ? e.message : "分析に失敗しました。");
+          setEditOpen(false);
+          return;
+        }
+      }
+      setEditOpen(false);
+    } catch {
+      setEditError("保存に失敗しました。");
+    } finally {
+      setEditSubmitMode("idle");
+    }
+  };
 
   if (loading) {
     return (
@@ -234,7 +502,7 @@ export function HistoryPage({
               viewMonth === todayParts.month &&
               viewYear === todayParts.year;
             const isSelected = day === selectedDate;
-            const entry = entries.find((e) => e.postedAt === dateStr);
+            const entry = entries.find((e) => toYmdInTokyo(e.postedAt) === dateStr);
             const mood = entry?.mood ?? moodForDate(dateStr);
 
             return (
@@ -279,57 +547,314 @@ export function HistoryPage({
             </p>
           </div>
 
-          {selectedEmotions.length > 0 && (
-            <div className="mb-5 space-y-3">
-              <p className="text-[10px] underline font-medium tracking-widest">
-                その日の感情
-              </p>
-              {selectedEntry.mood && (() => {
-                const opt = MOOD_OPTIONS.find((m) => m.value === selectedEntry.mood);
-                if (!opt) return null;
-                const Icon = opt.Icon;
-                return (
-                  <div className="pl-2">
-                    <p className="text-[10px] font-medium tracking-widest mb-2">
-                      選択した気分
-                    </p>
-                    <div className="flex items-center gap-2">
-                      <Icon className="h-4 w-4 text-foreground" />
-                      <span className="text-xs font-medium text-foreground">{opt.label}</span>
-                    </div>
-                  </div>
-                );
-              })()}
-              <div className="space-y-3 mt-4 pl-2">
-                <p className="text-[10px] font-medium tracking-widest">
-                  感情分析結果
+          {selectedEntry.mood && (() => {
+            const opt = MOOD_OPTIONS.find((m) => m.value === selectedEntry.mood);
+            if (!opt) return null;
+            const Icon = opt.Icon;
+            return (
+              <div className="mb-5">
+                <p className="text-[10px] underline font-medium tracking-widest mb-2">
+                  気分
                 </p>
-                {selectedEmotions.map((text, i) => (
-                  <div
-                    key={i}
-                    className="rounded-bl-xl border-l-3 border-b-2 border-foreground/20 py-2.5 px-4"
-                  >
-                    <p className="text-sm text-foreground leading-relaxed">
-                      {text}
-                    </p>
-                  </div>
-                ))}
+                <div className="flex items-center gap-2 pl-2">
+                  <Icon className="h-4 w-4 text-foreground" />
+                  <span className="text-xs font-medium text-foreground">{opt.label}</span>
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
-          <p className="text-[10px] underline font-medium tracking-widest mt-8">
+          <p className="text-[10px] underline font-medium tracking-widest">
             ふりかえり
           </p>
           <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap mt-2 pl-2">
             {selectedEntry.body}
           </p>
+
+          {selectedEntry.dailyAnalysis && (
+            <div className="mt-6 space-y-4">
+              <p className="text-[10px] underline font-medium tracking-widest">
+                分析結果
+              </p>
+
+              {selectedEmotions.length > 0 && (
+                <div className="pl-2">
+                  <p className="text-[10px] font-medium tracking-widest text-muted-foreground mb-1">感情</p>
+                  {selectedEmotions.map((text, i) => (
+                    <div
+                      key={i}
+                      className="rounded-bl-xl border-l-3 border-b-2 border-foreground/20 py-2 px-4 mt-1"
+                    >
+                      <p className="text-sm text-foreground leading-relaxed">{text}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {Array.isArray(selectedEntry.dailyAnalysis.thoughtPatterns) &&
+                selectedEntry.dailyAnalysis.thoughtPatterns.length > 0 && (
+                <div className="pl-2">
+                  <p className="text-[10px] font-medium tracking-widest text-muted-foreground mb-1">思考傾向</p>
+                  <ul className="list-disc list-inside space-y-1 text-sm text-foreground">
+                    {selectedEntry.dailyAnalysis.thoughtPatterns.map((item, i) => (
+                      <li key={i}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {selectedEntry.dailyAnalysis.tension && (
+                <div className="pl-2">
+                  <p className="text-[10px] font-medium tracking-widest text-muted-foreground mb-1">緊張・葛藤</p>
+                  <p className="text-sm text-foreground leading-relaxed">{selectedEntry.dailyAnalysis.tension}</p>
+                </div>
+              )}
+
+              {selectedEntry.dailyAnalysis.metaInsight && (
+                <div className="pl-2">
+                  <p className="text-[10px] font-medium tracking-widest text-muted-foreground mb-1">メタな気づき</p>
+                  <p className="text-sm text-foreground leading-relaxed italic">{selectedEntry.dailyAnalysis.metaInsight}</p>
+                </div>
+              )}
+
+              {selectedEntry.dailyAnalysis.question && (
+                <div className="pl-2 border-t border-border pt-3">
+                  <p className="text-[10px] font-medium tracking-widest text-muted-foreground mb-1">問い</p>
+                  <p className="text-sm text-foreground leading-relaxed">「{selectedEntry.dailyAnalysis.question}」</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="mt-6 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={openEditModal}
+              className="rounded-lg border border-border bg-card px-4 py-2 text-xs font-medium text-foreground hover:bg-accent transition-colors cursor-pointer"
+            >
+              編集
+            </button>
+          </div>
+
+          {genMessage && (
+            <p className="mt-2 text-xs text-red-600">{genMessage}</p>
+          )}
         </div>
       ) : (
         <div className="rounded-xl border border-dashed border-border p-8 text-center">
           <p className="text-sm text-muted-foreground">
             日付を選ぶと、その日のふりかえりが表示されます。
           </p>
+        </div>
+      )}
+
+      {editOpen && selectedEntry && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="history-edit-title"
+        >
+          <div className="w-full max-w-lg overflow-hidden rounded-xl border border-border bg-white shadow-lg dark:bg-zinc-950">
+            <div className="max-h-[90vh] overflow-y-auto overflow-x-hidden p-6">
+            <h2 id="history-edit-title" className="text-sm font-semibold text-foreground mb-4">
+              ふりかえりを編集
+            </h2>
+            <label className="block text-[10px] font-medium uppercase tracking-widest text-muted-foreground mb-2">
+              気分
+            </label>
+            <div className="flex flex-wrap gap-2 mb-5">
+              {MOOD_OPTIONS.map((m) => {
+                const Icon = m.Icon;
+                return (
+                  <button
+                    key={m.value}
+                    type="button"
+                    onClick={() => setEditMood(m.value)}
+                    className={cn(
+                      "flex flex-col items-center gap-1 rounded-lg border px-3 py-2 text-[10px]",
+                      editMood === m.value
+                        ? "border-foreground/40 bg-foreground/10"
+                        : "border-border bg-secondary/30",
+                    )}
+                  >
+                    <Icon className="h-4 w-4" />
+                    {m.label}
+                  </button>
+                );
+              })}
+            </div>
+            <label className="block text-[10px] font-medium uppercase tracking-widest text-muted-foreground mb-2">
+              本文
+            </label>
+            <div className="rounded-lg border border-border bg-background overflow-hidden mb-2">
+              <textarea
+                value={editBody}
+                onChange={(e) =>
+                  setEditBody(
+                    plan === "free"
+                      ? e.target.value.slice(0, MAX_BODY_FREE)
+                      : e.target.value,
+                  )
+                }
+                className="w-full min-h-[260px] resize-none border-0 bg-transparent p-3 text-sm leading-relaxed text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-0"
+              />
+            </div>
+            {plan === "free" && (
+              <p className="text-[10px] text-muted-foreground mb-4 text-right">
+                {editBody.length}/{MAX_BODY_FREE}
+              </p>
+            )}
+
+            <p className="text-xs font-medium text-foreground">
+              今月の再分析の残り:{" "}
+              <span className="tabular-nums">
+                {journalRegenerationBRemaining} / {journalRegenerationBLimit} 回
+              </span>
+            </p>
+            <p className="text-[10px] text-muted-foreground mt-1 mb-4 leading-relaxed">
+              分析が失敗した際の分析再試行は、上記の回数には含まれません。
+            </p>
+
+            {editError && <p className="text-xs text-red-600 mb-3">{editError}</p>}
+            {genMessage && <p className="text-xs text-red-600 mb-3">{genMessage}</p>}
+
+            <div className="flex flex-col-reverse gap-2 mt-4 sm:flex-row sm:flex-wrap sm:justify-end">
+              <button
+                type="button"
+                disabled={editSubmitMode !== "idle"}
+                onClick={() => {
+                  setReanalyzeModal("closed");
+                  setEditOpen(false);
+                }}
+                className="rounded-lg border border-border bg-transparent px-4 py-2.5 text-xs font-medium text-foreground hover:bg-accent disabled:opacity-50 cursor-pointer"
+              >
+                キャンセル
+              </button>
+              <button
+                type="button"
+                disabled={editSubmitMode !== "idle" || !editMood}
+                onClick={() => void saveEdit(false)}
+                className="rounded-lg border border-foreground/25 bg-foreground/5 px-4 py-2.5 text-xs font-medium text-foreground hover:bg-foreground/10 disabled:opacity-50 cursor-pointer"
+              >
+                {editSubmitMode === "save" ? "保存中…" : "保存のみ"}
+              </button>
+              <button
+                type="button"
+                disabled={editSubmitMode !== "idle" || !editMood}
+                title={
+                  !canSaveAndReanalyze && editMood
+                    ? saveAndReanalyzeDisabledReason ?? undefined
+                    : undefined
+                }
+                onClick={onClickReanalyzeInEdit}
+                className="rounded-lg bg-foreground px-4 py-2.5 text-xs font-medium text-background hover:bg-foreground/90 disabled:opacity-50 cursor-pointer"
+              >
+                {editSubmitMode === "saveAndReanalyze"
+                  ? "処理中…"
+                  : "保存して再分析する"}
+              </button>
+            </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {reanalyzeModal === "confirm" && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="reanalyze-confirm-title"
+        >
+          <div className="w-full max-w-md overflow-hidden rounded-xl border border-border bg-white shadow-lg dark:bg-zinc-950">
+            <div className="p-6">
+              <h3
+                id="reanalyze-confirm-title"
+                className="text-sm font-semibold text-foreground mb-3"
+              >
+                保存して再分析する
+              </h3>
+              <div className="text-sm text-foreground leading-relaxed space-y-3">
+                {showDailyRegenB ? (
+                  <>
+                    <p>
+                      一度のふりかえりとしっかり向き合うため、再分析回数に制限があります。
+                    </p>
+                    <p>
+                      今月残り {journalRegenerationBRemaining} 回です。
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p>
+                      一度のふりかえりとしっかり向き合うため、分析には時間がかかります。
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      参考: 今月の再分析の残り{" "}
+                      <span className="tabular-nums">
+                        {journalRegenerationBRemaining} / {journalRegenerationBLimit}
+                      </span>{" "}
+                      回
+                    </p>
+                  </>
+                )}
+              </div>
+              <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={() => setReanalyzeModal("closed")}
+                  className="rounded-lg border border-border bg-transparent px-4 py-2.5 text-xs font-medium text-foreground hover:bg-accent cursor-pointer"
+                >
+                  戻る
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReanalyzeModal("closed");
+                    void saveEdit(true);
+                  }}
+                  className="rounded-lg bg-foreground px-4 py-2.5 text-xs font-medium text-background hover:bg-foreground/90 cursor-pointer"
+                >
+                  保存して再分析する
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {reanalyzeModal === "blocked" && reanalyzeBlockedContent && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="reanalyze-blocked-title"
+        >
+          <div className="w-full max-w-md overflow-hidden rounded-xl border border-border bg-white shadow-lg dark:bg-zinc-950">
+            <div className="p-6">
+              <h3
+                id="reanalyze-blocked-title"
+                className="text-sm font-semibold text-foreground mb-3"
+              >
+                {reanalyzeBlockedContent.title}
+              </h3>
+              <div className="text-sm text-foreground leading-relaxed space-y-3">
+                {reanalyzeBlockedContent.lines.map((line, i) => (
+                  <p key={i}>{line}</p>
+                ))}
+              </div>
+              <div className="mt-6 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setReanalyzeModal("closed")}
+                  className="rounded-lg bg-foreground px-4 py-2.5 text-xs font-medium text-background hover:bg-foreground/90 cursor-pointer"
+                >
+                  閉じる
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
