@@ -613,7 +613,7 @@ async function retryJournalAnalysis(
       {
         error: "week_out",
         message:
-          "今週（月曜始まり・東京）のふりかえりのみ、日次分析の取得・やり直しができます。",
+          "今週（月曜始まり）のふりかえりのみ、日次分析の取得・やり直しができます。",
       },
       { status: 403 },
     );

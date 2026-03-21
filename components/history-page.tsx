@@ -268,7 +268,7 @@ export function HistoryPage({
           title: "再分析できません",
           lines: [
             "一度の振り返りとしっかり向き合うため、再分析は今週の記録に限ります。",
-            "今週（月曜始まり・東京）のふりかえりのみ、再分析を実行できます。",
+            "今週（月曜始まり）のふりかえりのみ、再分析を実行できます。",
           ],
         }
       : selectedEntry.hasDailyAnalysis && plan === "free"
