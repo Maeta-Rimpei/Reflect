@@ -15,7 +15,14 @@ import type {
   TodayEntry,
   WeekDayItem,
 } from "@/types/journal";
-import { Laugh, Smile, Meh, Frown, HeartCrack } from "lucide-react";
+import { Laugh, Smile, Meh, Frown, HeartCrack, Lightbulb } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 /** 気分選択肢（value / 表示ラベル / アイコン） */
 const MOOD_OPTIONS = [
@@ -30,6 +37,19 @@ const MOOD_OPTIONS = [
 const MAX_CHARS = 800;
 /** 曜日ラベル（日〜土） */
 const WEEKDAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"];
+
+/** 入力ガイド（良い例・悪い例）— docs/task.md と同期 */
+const JOURNAL_INPUT_GUIDE = {
+
+  bad: "今日は仕事で疲れた。\nなんかうまくいかなかった。\n日中食べた弁当がおいしかった。\n今日の天気は快晴でなんかよかった。",
+  good:
+    "[出来事1]\n上司に進捗を指摘されて焦った。\nちゃんとやっていたつもりだったので悔しかった。\n最近ミスが続いていて、自分に自信がなくなっている気がする。\n[出来事2]\n先輩にxxxの作業を褒められて嬉しかった。\nxxxの作業は何気なくやっていたが自信がついた。",
+  points: [
+    "1. 選択した気分に関連する出来事を書いてください。",   
+    "2. その出来事に対して、どのような感情を抱いたか、またなぜその感情を抱いたかを書いてください。",
+    "3. 出来事や話題が複数ある時は、出来事や話題ごとに分けて書いてみてください。",
+  ],
+} as const;
 
 /**
  * API から返る生ペイロードを JournalAnalysis（generateJournalAnalysis の戻り値形）に正規化する。
@@ -100,6 +120,8 @@ export function JournalPage({
     initialData.journalRegenerationBRemaining,
   );
   const journalRegenerationBLimit = initialData.journalRegenerationBLimit;
+  /** 「より良い分析をするためのヒント」ダイアログの表示 */
+  const [hintDialogOpen, setHintDialogOpen] = useState(false);
 
   const today = getTodayInTokyo();
   const streakDays = getCurrentStreak(today, datesWithEntries);
@@ -341,12 +363,68 @@ export function JournalPage({
           </div>
 
           <div className="mb-6">
-            <label
-              htmlFor="journal-input"
-              className="block text-xs font-medium uppercase tracking-widest text-muted-foreground mb-3"
-            >
-              選んだ気分の理由や、今日あったこと・考えていること
-            </label>
+            <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2">
+              <label
+                htmlFor="journal-input"
+                className="min-w-0 flex-1 text-xs font-medium uppercase tracking-widest text-muted-foreground"
+              >
+                選んだ気分の理由や、今日あったこと・考えていること
+              </label>
+              <button
+                type="button"
+                onClick={() => setHintDialogOpen(true)}
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 py-1.5 text-[10px] font-medium uppercase tracking-widest text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+                aria-haspopup="dialog"
+                aria-expanded={hintDialogOpen}
+                aria-label="より良い分析をするためのヒントを開く"
+              >
+                <Lightbulb className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                より良い分析をするためヒント
+              </button>
+            </div>
+
+            <Dialog open={hintDialogOpen} onOpenChange={setHintDialogOpen}>
+              <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle className="text-base">
+                    より良い分析をするためのヒント
+                  </DialogTitle>
+                  <DialogDescription className="sr-only">
+                    入力例とポイントの説明
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 text-xs leading-relaxed text-foreground">
+                  <div>
+                    <p className="mb-2 flex items-center gap-1.5 font-medium text-foreground">
+                      <Lightbulb className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      ポイント
+                    </p>
+                    <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
+                      {JOURNAL_INPUT_GUIDE.points.map((line) => (
+                        <li key={line}>{line}</li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div>
+                    <p className="mb-1.5 font-medium text-foreground">
+                      ❌ 分析精度が低下する例
+                    </p>
+                    <p className="rounded-lg border border-border bg-secondary/40 px-3 py-2 text-muted-foreground whitespace-pre-wrap">
+                      {JOURNAL_INPUT_GUIDE.bad}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="mb-1.5 font-medium text-foreground">
+                      ✅ 分析精度が高くなる例
+                    </p>
+                    <p className="rounded-lg border border-border bg-secondary/40 px-3 py-2 text-muted-foreground whitespace-pre-wrap">
+                      {JOURNAL_INPUT_GUIDE.good}
+                    </p>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+
             <div className="rounded-xl border border-border bg-card overflow-hidden focus-within:ring-1 focus-within:ring-foreground/20 transition-shadow">
               <textarea
                 id="journal-input"
@@ -419,14 +497,6 @@ export function JournalPage({
 
             {!isAnalyzing && analysis && (
               <div className="space-y-5">
-                {analysis.summary && (
-                  <div>
-                    <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground mb-2">
-                      要約
-                    </p>
-                    <p className="text-sm text-foreground leading-relaxed">{analysis.summary}</p>
-                  </div>
-                )}
                 {(analysis.primaryEmotion || analysis.secondaryEmotion) && (
                   <div>
                     <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground mb-2">
@@ -519,7 +589,7 @@ export function JournalPage({
                   <p className="text-xs text-red-600">{analysisError}</p>
                 )}
                 <p className="text-[10px] text-muted-foreground">
-                  成功後の再分析（今月あと {journalRegenerationBRemaining} / {journalRegenerationBLimit} 回）
+                  再分析（今月あと {journalRegenerationBRemaining} / {journalRegenerationBLimit} 回）
                 </p>
                 <button
                   type="button"
@@ -540,7 +610,7 @@ export function JournalPage({
 
             {plan === "deep" && hasDailyAnalysis && analysis && journalRegenerationBRemaining === 0 && (
               <p className="mt-4 text-[10px] text-muted-foreground">
-                今月の「成功後の再分析」は上限に達しました。来月から再度お試しください。
+                今月の再分析は上限に達しました。来月から再度お試しください。
               </p>
             )}
           </div>
