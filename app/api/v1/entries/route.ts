@@ -4,19 +4,18 @@ import {
   createSupabaseAdminClient,
   isSupabaseAdminConfigured,
 } from "@/lib/supabase-admin";
-import { generateJournalAnalysis } from "@/lib/gemini";
 import { encrypt, decrypt, isEncryptionConfigured } from "@/lib/crypto";
 import { logger } from "@/lib/logger";
-import { PROMPT_VERSIONS } from "@/lib/prompt-versions";
 
 /** Free プラン時の本文最大文字数 */
 const MAX_BODY_LENGTH_FREE = 800;
 
 /**
  * ふりかえりエントリを1件保存する。
- * 認証必須。1日1件まで。body/mood 必須。保存後に日次AI分析を実行し、結果を DB に保存する。
+ * 認証必須。1日1件まで。body/mood 必須。
+ * 日次AI分析は `/api/v1/analysis/generate`（type: daily）で別途実行する。
  * @param req - JSON body: { body: string, mood: string }
- * @returns 201 + エントリ情報と dailyAnalysis、または 400/401/429/500
+ * @returns 201 + エントリ情報（dailyAnalysis は互換のため常に null）、または 400/401/429/500
  */
 export async function POST(req: NextRequest) {
   if (!isSupabaseAdminConfigured()) {
@@ -155,41 +154,6 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    let journalAnalysis: Awaited<ReturnType<typeof generateJournalAnalysis>> | null = null;
-    try {
-      journalAnalysis = await generateJournalAnalysis(text);
-    } catch (aiError) {
-      logger.errorException("[entries] ジャーナル分析に失敗", aiError);
-    }
-
-    if (journalAnalysis) {
-      await supabase.from("analysis_results").insert({
-        user_id: userId,
-        type: "daily",
-        period_from: postedAt,
-        period_to: postedAt,
-        prompt_version: PROMPT_VERSIONS.daily,
-        payload: {
-          summary: journalAnalysis.summary,
-          primaryEmotion: journalAnalysis.primaryEmotion,
-          secondaryEmotion: journalAnalysis.secondaryEmotion,
-          thoughtPatterns: journalAnalysis.thoughtPatterns,
-          tension: journalAnalysis.tension,
-          metaInsight: journalAnalysis.metaInsight,
-          question: journalAnalysis.question,
-        },
-      });
-
-      for (const tag of [journalAnalysis.primaryEmotion, journalAnalysis.secondaryEmotion]) {
-        if (!tag || !tag.trim()) continue;
-        await supabase.from("emotion_tags").insert({
-          user_id: userId,
-          entry_id: entry.id,
-          tag: tag.slice(0, 200),
-        });
-      }
-    }
-
     return NextResponse.json(
       {
         id: entry.id,
@@ -199,17 +163,7 @@ export async function POST(req: NextRequest) {
         postedAt: entry.posted_at,
         createdAt: entry.created_at,
         mood,
-        dailyAnalysis: journalAnalysis
-          ? {
-              summary: journalAnalysis.summary,
-              primaryEmotion: journalAnalysis.primaryEmotion,
-              secondaryEmotion: journalAnalysis.secondaryEmotion,
-              thoughtPatterns: journalAnalysis.thoughtPatterns,
-              tension: journalAnalysis.tension,
-              metaInsight: journalAnalysis.metaInsight,
-              question: journalAnalysis.question,
-            }
-          : null,
+        dailyAnalysis: null,
       },
       { status: 201 },
     );

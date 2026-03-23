@@ -15,7 +15,15 @@ import type {
   TodayEntry,
   WeekDayItem,
 } from "@/types/journal";
-import { Laugh, Smile, Meh, Frown, HeartCrack, Lightbulb } from "lucide-react";
+import {
+  Laugh,
+  Smile,
+  Meh,
+  Frown,
+  HeartCrack,
+  Lightbulb,
+  Loader2,
+} from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -204,7 +212,7 @@ export function JournalPage({
     }
   };
 
-  /** ふりかえりを保存し、返却された日次分析を表示する */
+  /** ふりかえりを保存し、続けて日次分析APIで結果を取得して表示する */
   const handleSave = async () => {
     if (!text.trim() || !selectedMood) return;
 
@@ -225,12 +233,11 @@ export function JournalPage({
       const data = (await response.json().catch(() => ({}))) as {
         id?: string;
         message?: string;
-        dailyAnalysis?: unknown;
       };
 
       if (!response.ok) {
         setAnalysisError(
-          data.message ?? (response.status === 429 ? "本日はすでに投稿済みです。" : "保存に失敗しました。")
+          data.message ?? (response.status === 429 ? "本日はすでに保存済みです。" : "保存に失敗しました。")
         );
         setAnalysis(null);
         setIsSaved(false);
@@ -238,8 +245,9 @@ export function JournalPage({
         return;
       }
 
+      const entryId = typeof data.id === "string" ? data.id : "";
       setTodayEntry({
-        id: typeof data.id === "string" ? data.id : "",
+        id: entryId,
         body: text.trim(),
         mood: selectedMood,
       });
@@ -248,17 +256,56 @@ export function JournalPage({
         setWeekDays((prev) => prev.map((d) => (d.today ? { ...d, done: true } : d)));
       }
 
-      const next = normalizeAnalysis(data.dailyAnalysis);
-      if (next) {
-        setAnalysis(next);
-        setHasDailyAnalysis(true);
-      } else {
+      if (!entryId) {
         setAnalysis(null);
         setHasDailyAnalysis(false);
-        setAnalysisError("AI分析に失敗しました。しばらく経ってから再試行してください。");
+        setAnalysisError("ふりかえりを保存できませんでした。ページを再読み込みしてください。");
+        return;
+      }
+
+      try {
+        const analyzeRes = await fetch("/api/v1/analysis/generate", {
+          method: "POST",
+          headers: { ...headers, "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ type: "daily", entryId }),
+        });
+        const analyzeData = (await analyzeRes.json().catch(() => ({}))) as {
+          payload?: unknown;
+          regenerationBRemaining?: number;
+          message?: string;
+        };
+
+        if (!analyzeRes.ok) {
+          setAnalysis(null);
+          setHasDailyAnalysis(false);
+          setAnalysisError(
+            analyzeData.message ??
+              "分析に失敗しました。しばらく経ってから再試行してください。",
+          );
+          return;
+        }
+
+        const next = normalizeAnalysis(analyzeData.payload);
+        if (next) {
+          setAnalysis(next);
+          setHasDailyAnalysis(true);
+          setAnalysisError(null);
+          if (typeof analyzeData.regenerationBRemaining === "number") {
+            setJournalRegenerationBRemaining(analyzeData.regenerationBRemaining);
+          }
+        } else {
+          setAnalysis(null);
+          setHasDailyAnalysis(false);
+          setAnalysisError("分析に失敗しました。しばらく経ってから再試行してください。");
+        }
+      } catch {
+        setAnalysis(null);
+        setHasDailyAnalysis(false);
+        setAnalysisError("分析に失敗しました。しばらく経ってから再試行してください。");
       }
     } catch {
-      setAnalysisError("保存または分析に失敗しました。");
+      setAnalysisError("保存に失敗しました。");
       setAnalysis(null);
       setIsSaved(false);
     } finally {
@@ -363,7 +410,7 @@ export function JournalPage({
           </div>
 
           <div className="mb-6">
-            <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2">
+            <div className="mb-3 flex flex-col sm:flex-row flex-wrap md:items-center gap-x-3 gap-y-2">
               <label
                 htmlFor="journal-input"
                 className="min-w-0 flex-1 text-xs font-medium uppercase tracking-widest text-muted-foreground"
@@ -373,7 +420,7 @@ export function JournalPage({
               <button
                 type="button"
                 onClick={() => setHintDialogOpen(true)}
-                className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 py-1.5 text-[10px] font-medium uppercase tracking-widest text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+                className="w-52 inline-flex shrink-0 items-center gap-1.5 underline bg-card ml-auto sm:ml-0 px-2.5 py-1.5 text-[10px] font-medium uppercase tracking-widest text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
                 aria-haspopup="dialog"
                 aria-expanded={hintDialogOpen}
                 aria-label="より良い分析をするためのヒントを開く"
@@ -384,7 +431,7 @@ export function JournalPage({
             </div>
 
             <Dialog open={hintDialogOpen} onOpenChange={setHintDialogOpen}>
-              <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-md">
+              <DialogContent className="max-h-[85vh] overflow-y-auto md:max-w-md max-w-[80vw] rounded-sm">
                 <DialogHeader>
                   <DialogTitle className="text-base">
                     より良い分析をするためのヒント
@@ -485,17 +532,38 @@ export function JournalPage({
             </div>
           )}
 
-          <div className="rounded-xl border border-border bg-card p-6 relative overflow-hidden">
+          <div
+            className="rounded-xl border border-border bg-card p-6 relative overflow-hidden"
+            aria-busy={isAnalyzing || isRetrying}
+          >
             <div className="absolute -top-10 -right-10 opacity-40 pointer-events-none">
               <RippleMotif size="md" />
             </div>
             <h2 className="relative text-sm font-semibold text-foreground mb-4">ふりかえり分析結果</h2>
 
-            {isAnalyzing && (
-              <p className="text-xs text-muted-foreground">ふりかえりを分析しています…</p>
+            {(isAnalyzing || isRetrying) && (
+              <div
+                className="relative flex flex-col items-center justify-center gap-4 rounded-lg border border-border/80 bg-muted/30 px-6 py-10 text-center"
+                role="status"
+                aria-live="polite"
+                aria-label="日次分析を実行中"
+              >
+                <Loader2
+                  className="h-10 w-10 shrink-0 animate-spin text-foreground/70"
+                  aria-hidden
+                />
+                <div className="space-y-1.5">
+                  <p className="text-sm font-medium text-foreground">
+                    {isRetrying ? "日次分析を再実行しています" : "日次分析を実行しています"}
+                  </p>
+                  <p className="text-xs text-muted-foreground leading-relaxed max-w-sm mx-auto">
+                    ふりかえりを分析しています。完了まで数秒かかることがあります。この画面のままお待ちください。
+                  </p>
+                </div>
+              </div>
             )}
 
-            {!isAnalyzing && analysis && (
+            {!isAnalyzing && !isRetrying && analysis && (
               <div className="space-y-5">
                 {(analysis.primaryEmotion || analysis.secondaryEmotion) && (
                   <div>
@@ -561,7 +629,10 @@ export function JournalPage({
               </div>
             )}
 
-            {!isAnalyzing && !isRetrying && !analysis && !analysisError && (
+            {!isAnalyzing &&
+              !isRetrying &&
+              !analysis &&
+              !analysisError && (
               <p className="text-xs text-muted-foreground">
                 ふりかえりが保存されました。AI分析がここに表示されます。
               </p>
@@ -597,7 +668,7 @@ export function JournalPage({
                   disabled={isRetrying}
                   className="rounded-lg border border-foreground/30 bg-foreground/10 px-4 py-2 text-xs font-medium text-foreground transition-colors hover:bg-foreground/15 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {isRetrying ? "分析中…" : "日次分析をやり直す（Deep）"}
+                  {isRetrying ? "分析中…" : "日次分析をやり直す"}
                 </button>
               </div>
             )}
