@@ -658,7 +658,7 @@ async function retryJournalAnalysis(
       return NextResponse.json(
         {
           error: "quota_exceeded",
-          message: `今月の「成功後の再分析」は ${limit} 回までです。来月以降に再度お試しください。`,
+          message: `今月の再分析は ${limit} 回までです。来月以降に再度お試しください。`,
         },
         { status: 429 },
       );
