@@ -23,10 +23,12 @@ import type {
 /** 環境変数 GEMINI_API_KEY（未設定時は分析機能は利用不可） */
 const apiKey = process.env.GEMINI_API_KEY;
 /** 利用するモデル名 */
-const MODEL = "gemini-2.0-flash";
+const MODEL = "gemini-2.5-flash";
 
 if (!apiKey) {
-  logger.warn("[gemini] GEMINI_API_KEY が未設定です。LLM による分析は利用できません。");
+  logger.warn(
+    "[gemini] GEMINI_API_KEY が未設定です。LLM による分析は利用できません。",
+  );
 }
 
 /** Gemini クライアント（API キーがある場合のみ生成） */
@@ -54,19 +56,41 @@ function extractText(result: any): string {
  * @returns パースしたオブジェクトまたは配列
  * @throws  JSON が見つからない場合
  */
-function parseJson(text: string): unknown {
+function parseJson(text: string, context: string): unknown {
   const codeBlock = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
   const candidate = codeBlock ? codeBlock[1] : text;
   const first = candidate.indexOf("{");
   const last = candidate.lastIndexOf("}");
   if (first !== -1 && last > first) {
-    return JSON.parse(candidate.slice(first, last + 1));
+    try {
+      return JSON.parse(candidate.slice(first, last + 1));
+    } catch (e) {
+      logger.errorException(`[gemini] JSON.parse 失敗 (${context})`, e, {
+        responseLength: text.length,
+        textPreview: text.slice(0, 200),
+      });
+      throw e;
+    }
   }
   const firstArr = candidate.indexOf("[");
   const lastArr = candidate.lastIndexOf("]");
   if (firstArr !== -1 && lastArr > firstArr) {
-    return JSON.parse(candidate.slice(firstArr, lastArr + 1));
+    try {
+      return JSON.parse(candidate.slice(firstArr, lastArr + 1));
+    } catch (e) {
+      logger.errorException(`[gemini] JSON.parse 失敗 (${context})`, e, {
+        responseLength: text.length,
+        textPreview: text.slice(0, 200),
+      });
+      throw e;
+    }
   }
+  logger.error("[gemini] モデル応答に JSON が見つからない", {
+    context,
+    model: MODEL,
+    responseLength: text.length,
+    textPreview: text.slice(0, 300),
+  });
   throw new Error("No JSON found in model response");
 }
 
@@ -84,7 +108,11 @@ export async function generateJournalAnalysis(
   journalBody: string,
 ): Promise<GeminiJournalAnalysisPayload> {
   if (!genAI) {
-    logger.warn("[gemini] GEMINI_API_KEY が未設定のため処理を実行できません");
+    logger.error("[gemini] GEMINI_API_KEY 未設定", {
+      fn: "generateJournalAnalysis",
+      model: MODEL,
+      journalBodyLength: journalBody.length,
+    });
     throw new Error("GEMINI_API_KEY is not configured");
   }
 
@@ -112,7 +140,7 @@ export async function generateJournalAnalysis(
   });
 
   const text = extractText(result);
-  const parsed = parseJson(text) as {
+  const parsed = parseJson(text, "journalAnalysis") as {
     summary?: unknown;
     primaryEmotion?: unknown;
     secondaryEmotion?: unknown;
@@ -153,7 +181,13 @@ export async function generateWeeklyAnalysis(
   periodTo: string,
 ): Promise<WeeklyAnalysisPayload> {
   if (!genAI) {
-    logger.warn("[gemini] GEMINI_API_KEY が未設定のため処理を実行できません");
+    logger.error("[gemini] GEMINI_API_KEY 未設定", {
+      fn: "generateWeeklyAnalysis",
+      model: MODEL,
+      periodFrom,
+      periodTo,
+      inputSummaryLength: inputSummary.length,
+    });
     throw new Error("GEMINI_API_KEY is not configured");
   }
 
@@ -179,7 +213,7 @@ export async function generateWeeklyAnalysis(
   });
 
   const text = extractText(result);
-  const parsed = parseJson(text) as Record<string, unknown>;
+  const parsed = parseJson(text, "weeklyAnalysis") as Record<string, unknown>;
 
   return {
     emotionDistribution: Array.isArray(parsed.emotionDistribution)
@@ -216,7 +250,13 @@ export async function generateMonthlyAnalysis(
   periodTo: string,
 ): Promise<MonthlyAnalysisPayload> {
   if (!genAI) {
-    logger.warn("[gemini] GEMINI_API_KEY が未設定のため処理を実行できません");
+    logger.error("[gemini] GEMINI_API_KEY 未設定", {
+      fn: "generateMonthlyAnalysis",
+      model: MODEL,
+      periodFrom,
+      periodTo,
+      inputSummaryLength: inputSummary.length,
+    });
     throw new Error("GEMINI_API_KEY is not configured");
   }
 
@@ -242,7 +282,7 @@ export async function generateMonthlyAnalysis(
   });
 
   const text = extractText(result);
-  const parsed = parseJson(text) as Record<string, unknown>;
+  const parsed = parseJson(text, "monthlyAnalysis") as Record<string, unknown>;
 
   return {
     dominantEmotions: Array.isArray(parsed.dominantEmotions)
@@ -279,7 +319,13 @@ export async function generateYearlyAnalysis(
   periodTo: string,
 ): Promise<YearlyAnalysisPayload> {
   if (!genAI) {
-    logger.error("[gemini] GEMINI_API_KEY が未設定のため処理を実行できません");
+    logger.error("[gemini] GEMINI_API_KEY 未設定", {
+      fn: "generateYearlyAnalysis",
+      model: MODEL,
+      periodFrom,
+      periodTo,
+      inputSummaryLength: inputSummary.length,
+    });
     throw new Error("GEMINI_API_KEY is not configured");
   }
 
@@ -305,7 +351,7 @@ export async function generateYearlyAnalysis(
   });
 
   const text = extractText(result);
-  const parsed = parseJson(text) as Record<string, unknown>;
+  const parsed = parseJson(text, "yearlyAnalysis") as Record<string, unknown>;
 
   return {
     coreThoughtPatterns: Array.isArray(parsed.coreThoughtPatterns)
@@ -338,7 +384,11 @@ export async function generatePersonalitySummary(
   summariesInput: string,
 ): Promise<PersonalityPayload> {
   if (!genAI) {
-    logger.error("[gemini] GEMINI_API_KEY が未設定のため処理を実行できません");
+    logger.error("[gemini] GEMINI_API_KEY 未設定", {
+      fn: "generatePersonalitySummary",
+      model: MODEL,
+      summariesInputLength: summariesInput.length,
+    });
     throw new Error("GEMINI_API_KEY is not configured");
   }
 
@@ -364,7 +414,7 @@ export async function generatePersonalitySummary(
   });
 
   const text = extractText(result);
-  const parsed = parseJson(text) as Record<string, unknown>;
+  const parsed = parseJson(text, "personalitySummary") as Record<string, unknown>;
 
   return {
     tendency: parsed.tendency ? String(parsed.tendency) : "",
@@ -391,7 +441,11 @@ export async function generatePersonalitySummary(
  */
 export async function generateQuestions(inputSummary: string): Promise<string[]> {
   if (!genAI) {
-    logger.error("[gemini] GEMINI_API_KEY が未設定のため処理を実行できません");
+    logger.error("[gemini] GEMINI_API_KEY 未設定", {
+      fn: "generateQuestions",
+      model: MODEL,
+      inputSummaryLength: inputSummary.length,
+    });
     throw new Error("GEMINI_API_KEY is not configured");
   }
 
@@ -410,6 +464,6 @@ export async function generateQuestions(inputSummary: string): Promise<string[]>
   });
 
   const text = extractText(result);
-  const parsed = parseJson(text);
+  const parsed = parseJson(text, "questions");
   return Array.isArray(parsed) ? parsed.map(String).filter(Boolean) : [];
 }

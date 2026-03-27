@@ -80,7 +80,11 @@ export async function POST(req: NextRequest) {
     });
 
     if (error) {
-      logger.error("[contact] insert failed", { message: error.message });
+      logger.error("[contact] insert failed", {
+        message: error.message,
+        userId,
+        category,
+      });
       return NextResponse.json(
         { error: "db_error", message: "送信に失敗しました。" },
         { status: 500 }
@@ -123,16 +127,25 @@ export async function POST(req: NextRequest) {
           `,
         });
         if (sendError) {
-          logger.error("[contact] Resend 送信に失敗", { message: sendError.message });
+          logger.error("[contact] Resend 送信に失敗", {
+            message: sendError.message,
+            userId,
+            category,
+          });
         }
       } catch (e) {
-        logger.errorException("[contact] Resend 送信でエラー", e);
+        logger.errorException("[contact] Resend 送信でエラー", e, {
+          userId,
+          category,
+        });
       }
     }
 
     return NextResponse.json({ ok: true, message: "お問い合わせを受け付けました。" });
   } catch (e) {
-    logger.errorException("[contact POST]", e);
+    logger.errorException("[contact POST] お問い合わせ処理でエラー", e, {
+      userId,
+    });
     return NextResponse.json(
       { error: "internal", message: "送信に失敗しました。" },
       { status: 500 }

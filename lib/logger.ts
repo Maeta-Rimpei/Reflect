@@ -92,12 +92,21 @@ export const logger = {
    * 例外をメッセージ＋スタック付きで記録する。
    * @param message - ログに残す説明
    * @param err - キャッチしたエラー（Error なら message/name/stack を記録）
+   * @param meta - 追加の文脈（userId・entryId など。秘匿情報は入れないこと）
    */
-  errorException(message: string, err: unknown): void {
+  errorException(
+    message: string,
+    err: unknown,
+    meta?: Record<string, unknown>,
+  ): void {
     const detail =
       err instanceof Error
         ? { message: err.message, name: err.name, stack: err.stack }
         : err;
-    logger.error(message, detail);
+    if (meta && Object.keys(meta).length > 0) {
+      logger.error(message, { ...meta, error: detail });
+    } else {
+      logger.error(message, detail);
+    }
   },
 };

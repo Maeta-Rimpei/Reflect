@@ -168,7 +168,9 @@ export async function POST(req: NextRequest) {
       { status: 201 },
     );
   } catch (e) {
-    logger.errorException("[entries POST] エントリー保存でエラー", e);
+    logger.errorException("[entries POST] エントリー保存でエラー", e, {
+      userId,
+    });
     return NextResponse.json(
       { error: "internal", message: "Failed to create entry" },
       { status: 500 },
@@ -286,7 +288,9 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json(withMoods);
   } catch (e) {
-    logger.errorException("[entries GET] エントリー取得でエラー", e);
+    logger.errorException("[entries GET] エントリー取得でエラー", e, {
+      userId,
+    });
     return NextResponse.json(
       { error: "internal", message: "Failed to list entries" },
       { status: 500 },

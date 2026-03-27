@@ -20,7 +20,8 @@ export async function POST(req: NextRequest) {
   let body: { token?: string };
   try {
     body = await req.json();
-  } catch {
+  } catch (e) {
+    logger.errorException("[verify-token] リクエスト JSON の解析に失敗", e);
     return NextResponse.json(
       { error: "validation", message: "Invalid JSON" },
       { status: 400 },
@@ -65,7 +66,9 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ ok: true, email: tokenRow.email });
   } catch (e) {
-    logger.errorException("[verify-token] トークン検証でエラー", e);
+    logger.errorException("[verify-token] トークン検証でエラー", e, {
+      tokenPrefix: token.slice(0, 8),
+    });
     return NextResponse.json(
       { error: "internal", message: "エラーが発生しました。" },
       { status: 500 },

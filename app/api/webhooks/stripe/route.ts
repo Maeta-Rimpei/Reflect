@@ -26,8 +26,8 @@ export async function POST(req: NextRequest) {
     const body = await req.text();
     event = stripe.webhooks.constructEvent(body, sig, STRIPE_WEBHOOK_SECRET);
   } catch (err) {
+    logger.errorException("[webhook stripe] 署名検証に失敗", err);
     const message = err instanceof Error ? err.message : "Unknown error";
-    logger.error("[webhook stripe] 署名検証に失敗", message);
     return NextResponse.json({ error: `Webhook signature failed: ${message}` }, { status: 400 });
   }
 
@@ -77,6 +77,8 @@ export async function POST(req: NextRequest) {
               message: subError.message,
               code: subError.code,
               details: subError.details,
+              userId,
+              subscriptionId,
             });
           }
         }
@@ -147,7 +149,10 @@ export async function POST(req: NextRequest) {
         break;
     }
   } catch (e) {
-    logger.errorException("[webhook stripe] ハンドラでエラー", e);
+    logger.errorException("[webhook stripe] ハンドラでエラー", e, {
+      eventType: event.type,
+      eventId: event.id,
+    });
     return NextResponse.json(
       { error: "Webhook handler failed" },
       { status: 500 },

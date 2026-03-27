@@ -3,12 +3,14 @@ import { generateJournalAnalysis } from "@/lib/gemini";
 import { logger } from "@/lib/logger";
 
 export async function POST(req: NextRequest) {
+  let inputTextLength = 0;
   try {
     const body = await req.json().catch(() => null) as {
       text?: string;
     } | null;
 
     const text = body?.text?.trim();
+    inputTextLength = text?.length ?? 0;
 
     if (!text) {
       return NextResponse.json(
@@ -21,7 +23,9 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(analysis, { status: 200 });
   } catch (error) {
-    logger.errorException("[analyze/journal] ジャーナル分析でエラー", error);
+    logger.errorException("[analyze/journal] ジャーナル分析でエラー", error, {
+      inputTextLength,
+    });
 
     const message =
       error instanceof Error ? error.message : "Unknown error occurred";

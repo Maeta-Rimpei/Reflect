@@ -1,4 +1,5 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
+import { logger } from "@/lib/logger";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 const supabasePublishableKey =
@@ -14,6 +15,10 @@ export function isSupabaseConfigured(): boolean {
  */
 export function createSupabaseServerClient(accessToken: string): SupabaseClient {
   if (!supabaseUrl || !supabasePublishableKey) {
+    logger.error("[supabase-server] クライアントを作成できない", {
+      hasUrl: Boolean(supabaseUrl),
+      hasPublishableKey: Boolean(supabasePublishableKey),
+    });
     throw new Error("Supabase is not configured");
   }
   return createClient(supabaseUrl, supabasePublishableKey, {

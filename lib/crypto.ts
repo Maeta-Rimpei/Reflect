@@ -1,4 +1,5 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "crypto";
+import { logger } from "@/lib/logger";
 
 /**
  * サーバーサイド AES-256-GCM 暗号化
@@ -15,6 +16,10 @@ const KEY_HEX = process.env.ENCRYPTION_KEY;
  */
 function getKey(): Buffer {
   if (!KEY_HEX || KEY_HEX.length !== 64) {
+    logger.error("[crypto] ENCRYPTION_KEY が無効", {
+      configured: Boolean(KEY_HEX),
+      length: KEY_HEX?.length ?? 0,
+    });
     throw new Error(
       "ENCRYPTION_KEY must be a 64-character hex string (32 bytes). Generate with: openssl rand -hex 32",
     );
@@ -62,11 +67,18 @@ export function decrypt(ciphertext: string): string {
   const iv = Buffer.from(parts[0], "hex");
   const authTag = Buffer.from(parts[1], "hex");
   const encrypted = Buffer.from(parts[2], "hex");
-  const decipher = createDecipheriv(ALGORITHM, key, iv);
-  decipher.setAuthTag(authTag);
-  const decrypted = Buffer.concat([
-    decipher.update(encrypted),
-    decipher.final(),
-  ]);
-  return decrypted.toString("utf8");
+  try {
+    const decipher = createDecipheriv(ALGORITHM, key, iv);
+    decipher.setAuthTag(authTag);
+    const decrypted = Buffer.concat([
+      decipher.update(encrypted),
+      decipher.final(),
+    ]);
+    return decrypted.toString("utf8");
+  } catch (e) {
+    logger.errorException("[crypto] decrypt 失敗", e, {
+      ciphertextLength: ciphertext.length,
+    });
+    throw e;
+  }
 }

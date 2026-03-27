@@ -67,7 +67,9 @@ export async function GET(req: NextRequest) {
       updatedAt: row.created_at,
     });
   } catch (e) {
-    logger.errorException("[analysis/summary GET] サマリー取得でエラー", e);
+    logger.errorException("[analysis/summary GET] サマリー取得でエラー", e, {
+      userId,
+    });
     return NextResponse.json(
       { error: "internal", message: "Failed to get summary" },
       { status: 500 },

@@ -75,7 +75,12 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json(list);
   } catch (e) {
-    logger.errorException("[analysis GET] 分析一覧取得でエラー", e);
+    logger.errorException("[analysis GET] 分析一覧取得でエラー", e, {
+      userId,
+      type: typeParam,
+      from: fromParam,
+      to: toParam,
+    });
     return NextResponse.json(
       { error: "internal", message: "Failed to list analysis" },
       { status: 500 },

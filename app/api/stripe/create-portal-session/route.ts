@@ -63,7 +63,9 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ url: session.url });
   } catch (e) {
-    logger.errorException("[stripe create-portal-session] ポータルセッション作成でエラー", e);
+    logger.errorException("[stripe create-portal-session] ポータルセッション作成でエラー", e, {
+      userId,
+    });
     return NextResponse.json(
       { error: "internal", message: "プラン管理ページを開けませんでした。しばらくしてからもう一度お試しください。" },
       { status: 500 },

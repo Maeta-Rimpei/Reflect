@@ -47,7 +47,8 @@ export async function POST(req: NextRequest) {
   let body: { email?: string; password?: string; name?: string };
   try {
     body = await req.json();
-  } catch {
+  } catch (e) {
+    logger.errorException("[signup] リクエスト JSON の解析に失敗", e);
     return NextResponse.json(
       { error: "validation", message: "Invalid JSON" },
       { status: 400 },
@@ -201,7 +202,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ ok: true, verified: false });
   } catch (e) {
-    logger.errorException("[signup] 新規登録でエラー", e);
+    logger.errorException("[signup] 新規登録でエラー", e, { email });
     return NextResponse.json(
       { error: "internal", message: "エラーが発生しました。" },
       { status: 500 },

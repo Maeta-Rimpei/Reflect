@@ -1,8 +1,12 @@
 import Stripe from "stripe";
+import { logger } from "@/lib/logger";
 
 const secretKey = process.env.STRIPE_SECRET_KEY;
 
 if (!secretKey && process.env.NODE_ENV === "production") {
+  logger.error("[stripe] production で STRIPE_SECRET_KEY が未設定", {
+    nodeEnv: process.env.NODE_ENV,
+  });
   throw new Error("STRIPE_SECRET_KEY is required in production");
 }
 

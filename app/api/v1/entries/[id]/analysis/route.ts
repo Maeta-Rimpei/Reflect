@@ -87,7 +87,10 @@ export async function GET(
 
     return NextResponse.json(body);
   } catch (e) {
-    logger.errorException("[entries GET analysis] エントリー分析取得でエラー", e);
+    logger.errorException("[entries GET analysis] エントリー分析取得でエラー", e, {
+      userId,
+      entryId: id,
+    });
     return NextResponse.json(
       { error: "internal", message: "Failed to get analysis" },
       { status: 500 },

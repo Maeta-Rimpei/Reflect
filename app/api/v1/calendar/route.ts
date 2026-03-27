@@ -96,7 +96,11 @@ export async function GET(req: NextRequest) {
     const dates = [...new Set(rawDates.filter(Boolean))];
     return NextResponse.json({ dates });
   } catch (e) {
-    logger.errorException("[calendar GET] カレンダー取得でエラー", e);
+    logger.errorException("[calendar GET] カレンダー取得でエラー", e, {
+      userId,
+      from: fromParam,
+      to: toParam,
+    });
     return NextResponse.json(
       { error: "internal", message: "Failed to get calendar" },
       { status: 500 },

@@ -73,7 +73,9 @@ export async function POST() {
 
     return NextResponse.json({ plan: newPlan, status: sub.status });
   } catch (e) {
-    logger.errorException("[stripe sync-subscription] サブスク同期でエラー", e);
+    logger.errorException("[stripe sync-subscription] サブスク同期でエラー", e, {
+      userId,
+    });
     return NextResponse.json(
       { error: "internal", message: "Failed to sync subscription" },
       { status: 500 },

@@ -95,13 +95,19 @@ export async function POST(req: NextRequest) {
           message: subError.message,
           code: subError.code,
           details: subError.details,
+          userId,
+          subscriptionId,
+          checkoutSessionId,
         });
       }
     }
 
     return NextResponse.json({ plan: "deep" });
   } catch (e) {
-    logger.errorException("[stripe verify-checkout] チェックアウト検証でエラー", e);
+    logger.errorException("[stripe verify-checkout] チェックアウト検証でエラー", e, {
+      userId: session.user.id,
+      checkoutSessionId,
+    });
     return NextResponse.json(
       { error: "internal", message: "Failed to verify checkout" },
       { status: 500 },

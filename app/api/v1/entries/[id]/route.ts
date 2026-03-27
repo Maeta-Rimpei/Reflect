@@ -73,7 +73,10 @@ export async function GET(
       mood: moodRow?.value ?? null,
     });
   } catch (e) {
-    logger.errorException("[entries GET id] エントリー取得でエラー", e);
+    logger.errorException("[entries GET id] エントリー取得でエラー", e, {
+      userId,
+      entryId: id,
+    });
     return NextResponse.json(
       { error: "internal", message: "Failed to get entry" },
       { status: 500 },
@@ -195,7 +198,11 @@ export async function PATCH(
         .eq("id", id)
         .eq("user_id", userId);
       if (updErr) {
-        logger.error("[entries PATCH] body 更新エラー", { message: updErr.message });
+        logger.error("[entries PATCH] body 更新エラー", {
+          message: updErr.message,
+          userId,
+          entryId: id,
+        });
         return NextResponse.json(
           { error: "db_error", message: "Failed to update entry" },
           { status: 500 },
@@ -213,6 +220,8 @@ export async function PATCH(
       if (moodInsErr) {
         logger.error("[entries PATCH] mood 更新エラー", {
           message: moodInsErr.message,
+          userId,
+          entryId: id,
         });
       }
     }
@@ -241,7 +250,7 @@ export async function PATCH(
       mood: moodRow?.value ?? null,
     });
   } catch (e) {
-    logger.errorException("[entries PATCH] エラー", e);
+    logger.errorException("[entries PATCH] エラー", e, { userId, entryId: id });
     return NextResponse.json(
       { error: "internal", message: "Failed to update entry" },
       { status: 500 },

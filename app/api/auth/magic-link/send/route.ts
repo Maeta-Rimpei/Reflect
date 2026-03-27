@@ -20,7 +20,8 @@ export async function POST(req: NextRequest) {
   let body: { email?: string };
   try {
     body = await req.json();
-  } catch {
+  } catch (e) {
+    logger.errorException("[magic-link send] リクエスト JSON の解析に失敗", e);
     return NextResponse.json(
       { error: "validation", message: "Invalid JSON" },
       { status: 400 },
@@ -110,7 +111,9 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ ok: true });
   } catch (e) {
-    logger.errorException("[magic-link send] メール送信処理でエラー", e);
+    logger.errorException("[magic-link send] メール送信処理でエラー", e, {
+      email,
+    });
     return NextResponse.json(
       { error: "internal", message: "エラーが発生しました。" },
       { status: 500 },

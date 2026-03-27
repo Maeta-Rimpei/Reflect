@@ -69,7 +69,9 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ url: checkoutSession.url });
   } catch (e) {
-    logger.errorException("[stripe create-checkout-session] チェックアウトセッション作成でエラー", e);
+    logger.errorException("[stripe create-checkout-session] チェックアウトセッション作成でエラー", e, {
+      userId,
+    });
     return NextResponse.json(
       { error: "internal", message: "Failed to create checkout session" },
       { status: 500 },

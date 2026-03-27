@@ -50,7 +50,10 @@ export async function DELETE() {
       .eq("id", userId);
 
     if (error) {
-      logger.error("[me/delete] 退会処理に失敗", { message: error.message });
+      logger.error("[me/delete] 退会処理に失敗", {
+        message: error.message,
+        userId,
+      });
       return NextResponse.json(
         { error: "db_error", message: error.message },
         { status: 500 },
@@ -81,7 +84,7 @@ export async function DELETE() {
     });
     return res;
   } catch (e) {
-    logger.errorException("[me/delete] 退会処理でエラー", e);
+    logger.errorException("[me/delete] 退会処理でエラー", e, { userId });
     return NextResponse.json(
       { error: "internal", message: "Failed to delete account" },
       { status: 500 },

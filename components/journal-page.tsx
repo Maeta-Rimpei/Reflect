@@ -431,42 +431,46 @@ export function JournalPage({
             </div>
 
             <Dialog open={hintDialogOpen} onOpenChange={setHintDialogOpen}>
-              <DialogContent className="max-h-[85vh] overflow-y-auto md:max-w-md max-w-[80vw] rounded-sm">
-                <DialogHeader>
-                  <DialogTitle className="text-base">
-                    より良い分析をするためのヒント
-                  </DialogTitle>
-                  <DialogDescription className="sr-only">
-                    入力例とポイントの説明
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4 text-xs leading-relaxed text-foreground">
-                  <div>
-                    <p className="mb-2 flex items-center gap-1.5 font-medium text-foreground">
-                      <Lightbulb className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                      ポイント
-                    </p>
-                    <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
-                      {JOURNAL_INPUT_GUIDE.points.map((line) => (
-                        <li key={line}>{line}</li>
-                      ))}
-                    </ul>
-                  </div>
-                  <div>
-                    <p className="mb-1.5 font-medium text-foreground">
-                      ❌ 分析精度が低下する例
-                    </p>
-                    <p className="rounded-lg border border-border bg-secondary/40 px-3 py-2 text-muted-foreground whitespace-pre-wrap">
-                      {JOURNAL_INPUT_GUIDE.bad}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="mb-1.5 font-medium text-foreground">
-                      ✅ 分析精度が高くなる例
-                    </p>
-                    <p className="rounded-lg border border-border bg-secondary/40 px-3 py-2 text-muted-foreground whitespace-pre-wrap">
-                      {JOURNAL_INPUT_GUIDE.good}
-                    </p>
+              <DialogContent className="flex max-h-[85vh] flex-col gap-0 overflow-hidden p-0 md:max-w-md max-w-[80vw]">
+                <div className="shrink-0 border-b border-border pl-6 pb-4 pt-6 pr-6">
+                  <DialogHeader className="space-y-0 text-left">
+                    <DialogTitle className="text-base leading-snug">
+                      より良い分析をするためのヒント
+                    </DialogTitle>
+                    <DialogDescription className="sr-only">
+                      入力例とポイントの説明
+                    </DialogDescription>
+                  </DialogHeader>
+                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-6 pl-6 pr-0">
+                  <div className="space-y-4 pr-6 pt-4 text-xs leading-relaxed text-foreground">
+                    <div>
+                      <p className="mb-2 flex items-center gap-1.5 font-medium text-foreground">
+                        <Lightbulb className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                        ポイント
+                      </p>
+                      <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
+                        {JOURNAL_INPUT_GUIDE.points.map((line) => (
+                          <li key={line}>{line}</li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div>
+                      <p className="mb-1.5 font-medium text-foreground">
+                        ❌ 分析精度が低下する例
+                      </p>
+                      <p className="rounded-lg border border-border bg-secondary/40 px-3 py-2 text-muted-foreground whitespace-pre-wrap">
+                        {JOURNAL_INPUT_GUIDE.bad}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="mb-1.5 font-medium text-foreground">
+                        ✅ 分析精度が高くなる例
+                      </p>
+                      <p className="rounded-lg border border-border bg-secondary/40 px-3 py-2 text-muted-foreground whitespace-pre-wrap">
+                        {JOURNAL_INPUT_GUIDE.good}
+                      </p>
+                    </div>
                   </div>
                 </div>
               </DialogContent>

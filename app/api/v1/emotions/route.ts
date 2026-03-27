@@ -145,7 +145,11 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json(sorted);
   } catch (e) {
-    logger.errorException("[emotions GET] 感情一覧取得でエラー", e);
+    logger.errorException("[emotions GET] 感情一覧取得でエラー", e, {
+      userId,
+      from: fromParam,
+      to: toParam,
+    });
     return NextResponse.json(
       { error: "internal", message: "Failed to get emotions" },
       { status: 500 },

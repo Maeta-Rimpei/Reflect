@@ -5,7 +5,11 @@ describe("fetchJournalInitialData", () => {
   it("初期データを取得する", async () => {
     const mockApi = vi.fn();
     vi.stubGlobal("fetch", mockApi);
-    const initialData = await fetchJournalInitialData("http://localhost:3000", "test");
+    const initialData = await fetchJournalInitialData(
+      "test-user-id",
+      "test@example.com",
+      null,
+    );
     expect(initialData).toBeDefined();
   });
 });

@@ -54,9 +54,10 @@ export async function POST(req: NextRequest) {
 
   const userId = session.user.id;
 
-  try {
-  // throw new Error("test");
+  let requestType: string | undefined;
+  let entryIdForLog: string | undefined;
 
+  try {
     const body = (await req.json().catch(() => null)) as {
       type?: string;
       from?: string;
@@ -64,6 +65,9 @@ export async function POST(req: NextRequest) {
       /** 日次再分析の対象エントリー（同一暦週内）。省略時は今日のエントリーを探す */
       entryId?: string;
     } | null;
+
+    requestType = body?.type;
+    entryIdForLog = body?.entryId;
 
     const type = body?.type;
     if (!type || !ALL_TYPES.includes(type as (typeof ALL_TYPES)[number])) {
@@ -509,7 +513,11 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     );
   } catch (e) {
-    logger.errorException("[analysis/generate POST] 分析生成でエラー", e);
+    logger.errorException("[analysis/generate POST] 分析生成でエラー", e, {
+      userId,
+      requestType,
+      entryId: entryIdForLog,
+    });
     return NextResponse.json(
       { error: "internal", message: "分析の生成に失敗しました。" },
       { status: 500 },
@@ -671,7 +679,17 @@ async function retryJournalAnalysis(
   try {
     result = await generateJournalAnalysis(plainBody);
   } catch (e) {
-    logger.errorException("[analysis/generate] 日次ジャーナル分析でエラー", e);
+    logger.errorException(
+      "[analysis/generate] 日次ジャーナル分析でエラー",
+      e,
+      {
+        userId,
+        entryId: entry.id,
+        dayYmd,
+        regenerationKind,
+        journalBodyLength: plainBody.length,
+      },
+    );
     return NextResponse.json(
       { error: "internal", message: "分析の生成に失敗しました。" },
       { status: 500 },
@@ -707,7 +725,16 @@ async function retryJournalAnalysis(
     try {
       await incrementJournalRegenerationB(supabase, userId);
     } catch (e) {
-      logger.errorException("[analysis/generate] 種類Bクォータ更新でエラー", e);
+      logger.errorException(
+        "[analysis/generate] 種類Bクォータ更新でエラー",
+        e,
+        {
+          userId,
+          entryId: entry.id,
+          dayYmd,
+          regenerationKind,
+        },
+      );
     }
   }
 

@@ -31,6 +31,8 @@ export async function GET(req: NextRequest) {
     );
   }
 
+  const userId = session.user.id;
+
   const viewMonth = parseInt(viewMonthParam, 10);
   const viewYear = parseInt(viewYearParam, 10);
   if (
@@ -46,7 +48,6 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const userId = session.user.id;
     const data = await fetchHistoryRangeData(userId, {
       from: fromParam,
       to: toParam,
@@ -56,7 +57,13 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json(data);
   } catch (e) {
-    logger.errorException("[history GET]", e);
+    logger.errorException("[history GET] 履歴取得でエラー", e, {
+      userId,
+      from: fromParam,
+      to: toParam,
+      viewMonth,
+      viewYear,
+    });
     return NextResponse.json(
       { error: "internal", message: "履歴の取得に失敗しました。" },
       { status: 500 },

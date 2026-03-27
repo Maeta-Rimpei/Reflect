@@ -5,6 +5,7 @@ import {
   isSupabaseAdminConfigured,
 } from "@/lib/supabase-admin";
 import { getPlan } from "@/lib/get-plan";
+import { logger } from "@/lib/logger";
 
 /**
  * ログインユーザーのプロフィール（id, email, name, plan）を返す。
@@ -82,7 +83,8 @@ export async function GET() {
       plan,
       totalEntryDays,
     });
-  } catch {
+  } catch (e) {
+    logger.errorException("[me GET] プロフィール取得でエラー", e, { userId });
     return NextResponse.json(
       { error: "internal", message: "Failed to get user" },
       { status: 500 },

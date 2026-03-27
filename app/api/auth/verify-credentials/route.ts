@@ -22,7 +22,8 @@ export async function POST(req: NextRequest) {
   let body: { email?: string; password?: string };
   try {
     body = await req.json();
-  } catch {
+  } catch (e) {
+    logger.errorException("[verify-credentials] リクエスト JSON の解析に失敗", e);
     return NextResponse.json(
       { error: "validation", message: "Invalid JSON" },
       { status: 400 },
@@ -73,7 +74,9 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ ok: true });
   } catch (e) {
-    logger.errorException("[verify-credentials] 認証情報検証でエラー", e);
+    logger.errorException("[verify-credentials] 認証情報検証でエラー", e, {
+      email,
+    });
     return NextResponse.json(
       { error: "internal", message: "エラーが発生しました。" },
       { status: 500 },
