@@ -1,5 +1,4 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
-import { logger } from "@/lib/logger";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 // integration.md 方針: Secret key (sb_secret_xxx) を使用。未設定時はレガシー service_role をフォールバック。
@@ -13,7 +12,8 @@ const adminKey =
  */
 export function createSupabaseAdminClient(): SupabaseClient {
   if (!supabaseUrl || !adminKey) {
-    logger.error("[supabase-admin] 管理クライアントを作成できない", {
+    // middleware(Edge) から auth 経由でこのモジュールが読み込まれるため @/lib/logger は使わない（path/fs を引かない）
+    console.error("[supabase-admin] 管理クライアントを作成できない", {
       hasUrl: Boolean(supabaseUrl),
       hasAdminKey: Boolean(adminKey),
     });

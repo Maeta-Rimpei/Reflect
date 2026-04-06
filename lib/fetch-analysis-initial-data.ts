@@ -13,18 +13,12 @@ import {
   getNextDay,
 } from "@/lib/date-utils";
 import type {
-  AnalysisInitialData,
+  AnalysisInitialDataWithoutPlan,
   PersonalityData,
   WeeklyPayload,
   MonthlyPayload,
   YearlyPayload,
 } from "@/types/analysis";
-
-/** plan を除いた分析初期データ（plan はページで getPlan() と結合する） */
-export type AnalysisInitialDataWithoutPlan = Omit<
-  AnalysisInitialData,
-  "plan"
->;
 
 /**
  * 分析ページ用の初期データを取得する。Supabase を直接参照する。

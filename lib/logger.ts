@@ -1,10 +1,9 @@
 /**
  * サーバー側ロガー。エラー時など要所でログをファイル＋コンソールに出力する。
  * ログファイル: LOG_DIR が設定されている場合のみファイルに追記（未設定時はコンソールのみ）。
+ *
+ * Edge（middleware 等）では path/fs を一切読み込まない。ファイル出力は Node ランタイムのみ。
  */
-
-import fs from "fs";
-import path from "path";
 
 /** ログレベル一覧（低→高）。LOG_LEVEL でこのいずれかを指定する。 */
 const LOG_LEVELS = ["debug", "info", "warn", "error"] as const;
@@ -15,13 +14,26 @@ const MIN_LEVEL_INDEX = LOG_LEVELS.indexOf(
   (process.env.LOG_LEVEL as LogLevel) || "info"
 );
 
-/**
- * ログ出力先ディレクトリを解決する。LOG_DIR 未設定なら null。
- * @returns 絶対パス、または null
- */
+function isEdgeRuntime(): boolean {
+  return (
+    typeof process !== "undefined" && process.env.NEXT_RUNTIME === "edge"
+  );
+}
+
+/** ログ出力先ディレクトリを解決する。LOG_DIR 未設定・Edge では null。 */
 function resolveLogDir(): string | null {
+  if (isEdgeRuntime()) return null;
   const dir = process.env.LOG_DIR;
   if (!dir || typeof dir !== "string") return null;
+  // Edge バンドルに path/fs を静的連結させないため、Node 時のみ require
+  let path: typeof import("path");
+  let fs: typeof import("fs");
+  try {
+    path = require("path") as typeof import("path");
+    fs = require("fs") as typeof import("fs");
+  } catch {
+    return null;
+  }
   const resolved = path.isAbsolute(dir) ? dir : path.join(process.cwd(), dir);
   try {
     fs.mkdirSync(resolved, { recursive: true });
@@ -31,8 +43,15 @@ function resolveLogDir(): string | null {
   }
 }
 
-/** ログファイルを書き出すディレクトリ（null のときはファイル出力なし） */
-const logDir = resolveLogDir();
+/** ログファイルを書き出すディレクトリ（遅延初期化） */
+let logDirCache: string | null | undefined;
+
+function getLogDir(): string | null {
+  if (logDirCache === undefined) {
+    logDirCache = resolveLogDir();
+  }
+  return logDirCache;
+}
 
 /** ログレベルを数値インデックスに変換（レベル比較用） */
 function levelIndex(level: LogLevel): number {
@@ -51,14 +70,26 @@ function formatMessage(level: LogLevel, message: string, meta?: unknown): string
 
 /** ログを日付別ファイル（app-YYYY-MM-DD.log）に追記する。失敗時は stderr にのみ出す（無限ループ防止）。 */
 function writeToFile(level: LogLevel, message: string, meta?: unknown): void {
+  const logDir = getLogDir();
   if (!logDir || levelIndex(level) < MIN_LEVEL_INDEX) return;
+  if (isEdgeRuntime()) return;
+  let path: typeof import("path");
+  let fs: typeof import("fs");
+  try {
+    path = require("path") as typeof import("path");
+    fs = require("fs") as typeof import("fs");
+  } catch {
+    return;
+  }
   const line = formatMessage(level, message, meta);
   const date = new Date().toISOString().slice(0, 10);
   const filePath = path.join(logDir, `app-${date}.log`);
   try {
     fs.appendFileSync(filePath, line, "utf8");
   } catch (err) {
-    process.stderr.write(`[logger] ログファイルへの書き込みに失敗しました: ${filePath}: ${err}\n`);
+    process.stderr.write(
+      `[logger] ログファイルへの書き込みに失敗しました: ${filePath}: ${err}\n`,
+    );
   }
 }
 

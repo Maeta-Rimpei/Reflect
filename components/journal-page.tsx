@@ -15,6 +15,9 @@ import type {
   TodayEntry,
   WeekDayItem,
 } from "@/types/journal";
+import { MAX_JOURNAL_BODY_LENGTH_FREE } from "@/constants/limits";
+import { PLAN_DEEP, PLAN_FREE } from "@/constants/plan";
+import type { Plan } from "@/types/plan";
 import {
   Laugh,
   Smile,
@@ -41,8 +44,6 @@ const MOOD_OPTIONS = [
   { value: "bad", label: "かなりつらい", Icon: HeartCrack },
 ] as const;
 
-/** 本文の最大文字数 */
-const MAX_CHARS = 800;
 /** 曜日ラベル（日〜土） */
 const WEEKDAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"];
 
@@ -120,7 +121,7 @@ export function JournalPage({
   /** 今日のエントリ（保存済みの body / mood） */
   const [todayEntry, setTodayEntry] = useState<TodayEntry | null>(initialData.todayEntry ?? null);
   /** ユーザーのプラン（free / deep）。Deep なら週次・人格分析など表示 */
-  const [plan] = useState<"free" | "deep">(initialData.plan);
+  const [plan] = useState<Plan>(initialData.plan);
   /** DB に日次分析があるか（サーバー初回 + 保存・再試行で更新） */
   const [hasDailyAnalysis, setHasDailyAnalysis] = useState(initialData.hasDailyAnalysis);
   /** 種類 B（成功後の再分析）の今月残り */
@@ -313,10 +314,10 @@ export function JournalPage({
     }
   };
 
-  /** 現在の文字数（MAX_CHARS 制限済み） */
+  /** 現在の文字数（MAX_JOURNAL_BODY_LENGTH_FREE 制限済み） */
   const charCount = text.length;
   /** 文字数割合（90%超で警告表示用） */
-  const charPercentage = (charCount / MAX_CHARS) * 100;
+  const charPercentage = (charCount / MAX_JOURNAL_BODY_LENGTH_FREE) * 100;
   /** 種類 A: 未取得救済の再試行 */
   const showRetryTypeA =
     analysisError ||
@@ -326,7 +327,7 @@ export function JournalPage({
     !isAnalyzing &&
     !isRetrying &&
     !!analysis &&
-    plan === "deep" &&
+    plan === PLAN_DEEP &&
     hasDailyAnalysis &&
     journalRegenerationBRemaining > 0 &&
     !!todayEntry?.id;
@@ -480,7 +481,7 @@ export function JournalPage({
               <textarea
                 id="journal-input"
                 value={text}
-                onChange={(e) => setText(e.target.value.slice(0, MAX_CHARS))}
+                onChange={(e) => setText(e.target.value.slice(0, MAX_JOURNAL_BODY_LENGTH_FREE))}
                 placeholder="なぜその気分になったか、今日あったことや考えたことを自由に書いてください…"
                 className="w-full min-h-[200px] resize-none rounded-xl border-0 bg-card p-4 text-sm leading-relaxed text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-0"
               />
@@ -492,7 +493,7 @@ export function JournalPage({
                   charPercentage > 90 && "text-red-600"
                 )}
               >
-                {charCount}/{MAX_CHARS}
+                {charCount}/{MAX_JOURNAL_BODY_LENGTH_FREE}
               </span>
             </p>
           </div>
@@ -677,20 +678,20 @@ export function JournalPage({
               </div>
             )}
 
-            {plan === "free" && hasDailyAnalysis && analysis && !showRetryTypeB && (
+            {plan === PLAN_FREE && hasDailyAnalysis && analysis && !showRetryTypeB && (
               <p className="mt-4 text-[10px] text-muted-foreground">
                 分析のやり直しは Deep プランで利用できます（今月の回数制限あり）。
               </p>
             )}
 
-            {plan === "deep" && hasDailyAnalysis && analysis && journalRegenerationBRemaining === 0 && (
+            {plan === PLAN_DEEP && hasDailyAnalysis && analysis && journalRegenerationBRemaining === 0 && (
               <p className="mt-4 text-[10px] text-muted-foreground">
                 今月の再分析は上限に達しました。来月から再度お試しください。
               </p>
             )}
           </div>
 
-          {plan !== "deep" && (
+          {plan !== PLAN_DEEP && (
             <div className="rounded-xl border border-dashed border-foreground/20 bg-secondary/30 p-6 text-center">
               <p className="text-xs font-semibold text-foreground mb-1">
                 もっと深く自分を知りたいですか？

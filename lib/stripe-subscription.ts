@@ -1,7 +1,6 @@
-import type Stripe from "stripe";
+import type { SubscriptionWithPeriod } from "@/types/stripe";
 
-/** Stripe API の Subscription に存在する current_period_end（型定義に含まれない場合用） */
-export type SubscriptionWithPeriod = Stripe.Subscription & { current_period_end?: number };
+export type { SubscriptionWithPeriod };
 
 /**
  * サブスクリプションの終了日を ISO 形式で返す

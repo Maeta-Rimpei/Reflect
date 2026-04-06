@@ -14,6 +14,7 @@ import {
   getWeekRangeInTokyo,
 } from "@/lib/date-utils";
 import { logger } from "@/lib/logger";
+import { PLAN_DEEP, PLAN_FREE } from "@/constants/plan";
 import {
   getJournalRegenerationBLimit,
   getJournalRegenerationBRemaining,
@@ -24,6 +25,7 @@ import type {
   TodayEntry,
   WeekDayItem,
 } from "@/types/journal";
+import type { Plan } from "@/types/plan";
 
 const WEEKDAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"] as const;
 
@@ -82,7 +84,7 @@ export async function fetchJournalInitialData(
     streakDates: [],
     todayEntry: null,
     analysis: null,
-    plan: "free",
+    plan: PLAN_FREE,
     hasDailyAnalysis: false,
     journalRegenerationBRemaining: 0,
     journalRegenerationBLimit: getJournalRegenerationBLimit(),
@@ -110,7 +112,7 @@ export async function fetchJournalInitialData(
       id: userId,
       email,
       name,
-      plan: "free",
+      plan: PLAN_FREE,
       updated_at: new Date().toISOString(),
     });
     if (error) {
@@ -119,10 +121,10 @@ export async function fetchJournalInitialData(
     }
   }
 
-  const plan: "free" | "deep" =
-    (existing?.plan === "deep" || existing?.plan === "free"
+  const plan: Plan =
+    existing?.plan === PLAN_DEEP || existing?.plan === PLAN_FREE
       ? existing.plan
-      : "free") as "free" | "deep";
+      : PLAN_FREE;
 
   const [
     weekEntriesRes,
@@ -137,7 +139,7 @@ export async function fetchJournalInitialData(
       .eq("user_id", userId)
       .gte("posted_at", weekFrom)
       .lt("posted_at", getNextDay(weekTo)),
-    plan === "deep"
+    plan === PLAN_DEEP
       ? supabase
           .from("entries")
           .select("posted_at")
@@ -185,7 +187,11 @@ export async function fetchJournalInitialData(
   }
 
   let streakDates: string[];
-  if (plan === "deep" && Array.isArray(deepStreakRes.data) && deepStreakRes.data.length > 0) {
+  if (
+    plan === PLAN_DEEP &&
+    Array.isArray(deepStreakRes.data) &&
+    deepStreakRes.data.length > 0
+  ) {
     streakDates = (deepStreakRes.data as { posted_at: string }[]).map((r) =>
       toDateOnly(r.posted_at),
     );

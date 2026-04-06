@@ -62,7 +62,7 @@
 - **翌月の扱い**: **計上対象の月が切り替わる**（前月に上限まで使っても、翌月は **その月の枠が新しく**使える。利用回数は **0 から再カウント**）。「1 で上書き」ではなく **別月のレコード／別期間キー**として扱うイメージ。
 - **DB テーブル**: `public.quota_usage`（`docs/supabase-migration.sql` に定義）
   - `user_id` — `users.id` への FK
-  - `quota_key` — 制限の種類（種類 B は `journal_daily_regeneration_b` のような **固定文字列**。将来は週次レポート等で別キーを追加）
+  - `quota_key` — 制限の種類（日次再分析の月次上限は `monthly_daily_journal_regeneration` のような **固定文字列**。将来は週次レポート等で別キーを追加）
   - `period` — 集計期間（当面は東京の暦月 **`YYYY-MM`**）
   - `used_count` — その期間内の利用回数（種類 B 成功のたびに increment）
   - **PRIMARY KEY** `(user_id, quota_key, period)` — **1 ユーザー・1 キー・1 月に 1 行**
@@ -132,7 +132,7 @@
 
 ## 5. 未決（実装前に決めるとよいこと）
 
-- [x] 種類 **B** の **月あたり回数 N** — **3 回**（ユーザー月次・東京暦月・翌月リセット。§1.5）。`lib/quota-constants.ts` の `JOURNAL_DAILY_REGENERATION_B_MONTHLY_LIMIT` と一致。
+- [x] 種類 **B** の **月あたり回数 N** — **3 回**（ユーザー月次・東京暦月・翌月リセット。§1.5）。`constants/quota.ts` の `DAILY_JOURNAL_REGENERATION_MONTHLY_LIMIT` と一致。
 - [ ] 種類 **A** の **厳しすぎない**レート制限の有無（秒単位など。任意）
 
 ---

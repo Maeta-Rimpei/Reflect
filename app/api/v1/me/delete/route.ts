@@ -6,11 +6,17 @@ import {
 } from "@/lib/supabase-admin";
 import { getResend, isResendConfigured, MAIL_FROM } from "@/lib/resend";
 import { logger } from "@/lib/logger";
+import { COOKIE_WITHDRAWAL_COMPLETE } from "@/constants/cookies";
+import { stripe } from "@/lib/stripe";
+import {
+  cancelStripeSubscriptionForWithdrawal,
+  subscriptionNeedsStripeCancel,
+} from "@/lib/stripe-withdrawal";
 
 /**
  * 退会（論理削除）
- * users.deleted_at を設定する。データは残し、ログイン不可にする。
- * 完了後メールで通知し、クライアントは /goodbye へリダイレクトする。
+ * Deep 等で有効な Stripe サブスクがある場合は先に即時解約し、成功後に users.deleted_at を設定する。
+ * データは残し、ログイン不可にする。完了後メールで通知し、クライアントは /goodbye へリダイレクトする。
  */
 export async function DELETE() {
   if (!isSupabaseAdminConfigured()) {
@@ -41,6 +47,62 @@ export async function DELETE() {
 
     const email = user?.email ?? session.user.email;
 
+    const { data: subRow } = await supabase
+      .from("subscriptions")
+      .select("stripe_subscription_id, status")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    const subscriptionId = subRow?.stripe_subscription_id as
+      | string
+      | null
+      | undefined;
+    const subStatus = subRow?.status as string | null | undefined;
+
+    let stripeSubscriptionCanceled = false;
+
+    if (
+      subscriptionId &&
+      subscriptionNeedsStripeCancel(subStatus)
+    ) {
+      if (!stripe) {
+        logger.error("[me/delete] Stripe クライアントが無いのに有効なサブスク行がある", {
+          userId,
+        });
+        return NextResponse.json(
+          {
+            error: "stripe_unavailable",
+            message:
+              "決済の設定が完了していないため退会を完了できません。サポートにお問い合わせください。",
+          },
+          { status: 503 },
+        );
+      }
+      try {
+        await cancelStripeSubscriptionForWithdrawal(stripe, subscriptionId);
+        
+        stripeSubscriptionCanceled = true;
+        logger.info("[me/delete] 退会に伴う Stripe サブスク解約に成功", {
+          userId,
+          subscriptionId,
+          subscriptionStatusBeforeCancel: subStatus,
+        });
+      } catch (e) {
+        logger.errorException("[me/delete] Stripe サブスク解約に失敗", e, {
+          userId,
+          subscriptionId,
+        });
+        return NextResponse.json(
+          {
+            error: "stripe_cancel_failed",
+            message:
+              "プランの解約に失敗しました。しばらくしてから再度お試しください。",
+          },
+          { status: 502 },
+        );
+      }
+    }
+
     const { error } = await supabase
       .from("users")
       .update({
@@ -60,6 +122,12 @@ export async function DELETE() {
       );
     }
 
+    logger.info("[me/delete] 退会処理完了（論理削除）", {
+      userId,
+      stripeSubscriptionCanceled,
+      stripeSubscriptionId: subscriptionId ?? null,
+    });
+
     const mailFrom = MAIL_FROM;
     if (email && isResendConfigured() && mailFrom) {
       const resend = getResend();
@@ -76,7 +144,7 @@ export async function DELETE() {
     }
 
     const res = NextResponse.json({ deleted: true });
-    res.cookies.set("withdrawal_complete", "1", {
+    res.cookies.set(COOKIE_WITHDRAWAL_COMPLETE, "1", {
       path: "/goodbye",
       maxAge: 120,
       httpOnly: true,

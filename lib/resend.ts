@@ -9,6 +9,10 @@ export function isResendConfigured(): boolean {
 
 let _resend: Resend | null = null;
 
+/**
+ * Resend クライアントを取得する
+ * @returns Resend クライアント
+ */
 export function getResend(): Resend {
   if (!_resend) {
     if (!apiKey) {

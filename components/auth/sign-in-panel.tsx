@@ -7,8 +7,13 @@ import { Button } from "@/components/ui/button";
 import { RippleMotif } from "@/components/ripple-motif";
 import { Loader2, Eye, EyeOff } from "lucide-react";
 
+type SignInPanelProps = {
+  /** ログイン成功後のリダイレクト先（同一オリジン内パスのみ。呼び出し側で検証すること） */
+  callbackUrl?: string;
+};
+
 /** ログイン画面（Google / メール・パスワード） */
-export function SignInPanel() {
+export function SignInPanel({ callbackUrl = "/journal" }: SignInPanelProps) {
   /** メールアドレス入力値 */
   const [email, setEmail] = useState("");
   /** パスワード入力値 */
@@ -20,9 +25,9 @@ export function SignInPanel() {
   /** ログイン失敗時のエラーメッセージ */
   const [error, setError] = useState<string | null>(null);
 
-  /** Google OAuth でログイン（/journal へリダイレクト） */
+  /** Google OAuth でログイン */
   const handleGoogleSignIn = () => {
-    void signIn("google", { callbackUrl: "/journal" });
+    void signIn("google", { callbackUrl });
   };
 
   /** メール・パスワードでログイン（独自 API で検証 → NextAuth でセッション発行） */
@@ -53,7 +58,7 @@ export function SignInPanel() {
       await signIn("email-password", {
         email: email.trim(),
         password,
-        redirectTo: "/journal",
+        callbackUrl,
       });
     } catch {
       setError("エラーが発生しました。");

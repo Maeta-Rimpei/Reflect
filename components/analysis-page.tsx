@@ -21,22 +21,12 @@ import type {
   MonthlyPayload,
   YearlyPayload,
   AnalysisInitialData,
+  WeeklyReportState,
+  MonthlyReportState,
+  YearlyReportState,
 } from "@/types/analysis";
-
-type WeeklyReportState = {
-  period: { from: string; to: string };
-  payload: WeeklyPayload;
-} | null;
-
-type MonthlyReportState = {
-  period: { from: string; to: string };
-  payload: MonthlyPayload;
-} | null;
-
-type YearlyReportState = {
-  period: { from: string; to: string };
-  payload: YearlyPayload;
-} | null;
+import { PLAN_DEEP, PLAN_FREE } from "@/constants/plan";
+import type { Plan } from "@/types/plan";
 
 /** 週次・月次・人格・問いかけの分析レポートを表示するページコンポーネント */
 export function AnalysisPage({
@@ -77,7 +67,7 @@ export function AnalysisPage({
     "weekly" | "monthly" | "yearly" | "personality" | "question" | null
   >(null);
   /** ユーザーのプラン（free / deep）。Deep で全タブ利用可能 */
-  const [plan, setPlan] = useState<"free" | "deep">(initialData?.plan ?? "free");
+  const [plan, setPlan] = useState<Plan>(initialData?.plan ?? PLAN_FREE);
 
   /** 確認ダイアログ（useConfirmDialog で任意の画面から同じパターンで利用可能） */
   const { dialogProps: confirmDialogProps, openDialog, handleCancel: closeConfirmDialog } = useConfirmDialog(generating !== null);
@@ -115,8 +105,8 @@ export function AnalysisPage({
       ]);
 
     if (meRes.ok) {
-      const me = (await meRes.json()) as { plan?: "free" | "deep" };
-      setPlan(me.plan ?? "free");
+      const me = (await meRes.json()) as { plan?: Plan };
+      setPlan(me.plan ?? PLAN_FREE);
     }
 
     if (weeklyRes.ok) {
@@ -464,7 +454,7 @@ export function AnalysisPage({
           <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
             Deep分析
           </p>
-          {plan !== "deep" && (
+          {plan !== PLAN_DEEP && (
             <Badge
               variant="outline"
               className="text-[10px] px-1.5 py-0 rounded-md"
@@ -476,7 +466,7 @@ export function AnalysisPage({
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">
           分析レポート
         </h1>
-        {plan === "deep" && (
+        {plan === PLAN_DEEP && (
           <Link
             href="/analysis/history"
             className="inline-block mt-2 text-sm text-muted-foreground hover:text-foreground underline underline-offset-2"
@@ -507,7 +497,7 @@ export function AnalysisPage({
                 )}
               </button>
             )}
-            {plan !== "deep" && (
+            {plan !== PLAN_DEEP && (
               <Link
                 href="/settings"
                 className="inline-block font-medium text-foreground underline underline-offset-2 hover:no-underline"
@@ -580,7 +570,7 @@ export function AnalysisPage({
             ) : (
               <EmptyState
                 message={
-                  plan === "deep"
+                  plan === PLAN_DEEP
                     ? "週次レポートはまだありません。"
                     : "週次レポートはDeepプランで利用できます。アップグレードすると生成できます。"
                 }
@@ -604,7 +594,7 @@ export function AnalysisPage({
             ) : (
               <EmptyState
                 message={
-                  plan === "deep"
+                  plan === PLAN_DEEP
                     ? `${getMonthLabel(getMonthRangeInTokyo().from)}の月次レポートはまだありません。`
                     : "月次レポートはDeepプランで利用できます。アップグレードすると生成できます。"
                 }
@@ -628,7 +618,7 @@ export function AnalysisPage({
             ) : (
               <EmptyState
                 message={
-                  plan === "deep"
+                  plan === PLAN_DEEP
                     ? "直近12ヶ月の年次レポートはまだありません。"
                     : "年次レポートはDeepプランで利用できます。アップグレードすると生成できます。"
                 }
@@ -697,7 +687,7 @@ export function AnalysisPage({
             ) : (
               <EmptyState
                 message={
-                  plan === "deep"
+                  plan === PLAN_DEEP
                     ? "人格サマリーはまだありません。"
                     : "人格サマリーはDeepプランで利用できます。アップグレードすると利用できます。"
                 }

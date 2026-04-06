@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { GoodbyeContent } from "@/components/goodbye-content";
+import { COOKIE_WITHDRAWAL_COMPLETE } from "@/constants/cookies";
 
 /**
  * 退会完了ページ。退会 API 成功時に付与される Cookie がある場合のみ表示する。
@@ -8,7 +9,7 @@ import { GoodbyeContent } from "@/components/goodbye-content";
  */
 export default async function GoodbyePage() {
   const cookieStore = await cookies();
-  if (!cookieStore.get("withdrawal_complete")?.value) {
+  if (!cookieStore.get(COOKIE_WITHDRAWAL_COMPLETE)?.value) {
     redirect("/");
   }
 

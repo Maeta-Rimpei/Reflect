@@ -5,10 +5,31 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
-import { Check, ArrowRight, Loader2, LogOut } from "lucide-react";
+import {
+  ArrowRight,
+  BarChart3,
+  BookOpen,
+  CalendarDays,
+  CalendarRange,
+  Check,
+  Loader2,
+  LogOut,
+  MessageCircleQuestion,
+  UserRound,
+} from "lucide-react";
 import { getApiHeaders } from "@/lib/api-auth";
+import { PLAN_DEEP, PLAN_FREE } from "@/constants/plan";
+import type { Plan } from "@/types/plan";
+import type { ServerProfile } from "@/types/profile";
 
 /** Free プランの表示用（名前・価格・機能一覧） */
 const freePlan = {
@@ -37,26 +58,23 @@ const deepPlan = {
   ],
 };
 
-/** サーバーから渡す初回プロフィール（plan / email / name） */
-type InitialProfile = { plan: "free" | "deep"; email: string | null; name: string | null };
-
 /** プラン選択・決済・アカウント情報・退会を扱う設定ページ */
 export function SettingsPage({
   initialProfile,
   initialMessage,
 }: {
   /** サーバーで取得したプロフィール。ある場合は初回の /api/v1/me 取得をスキップする */
-  initialProfile?: InitialProfile | null;
+  initialProfile?: ServerProfile | null;
   /** サーバーで searchParams から組み立てたメッセージ（例: 支払いキャンセル） */
   initialMessage?: { type: "success" | "error" | "info"; text: string } | null;
 }) {
   const searchParams = useSearchParams();
   /** UI で選択中のプラン（ラジオ用） */
-  const [selectedPlan, setSelectedPlan] = useState<"free" | "deep">(
-    initialProfile?.plan ?? "free",
+  const [selectedPlan, setSelectedPlan] = useState<Plan>(
+    initialProfile?.plan ?? PLAN_FREE,
   );
   /** サーバーから取得した現在のプラン */
-  const [plan, setPlan] = useState<"free" | "deep">(initialProfile?.plan ?? "free");
+  const [plan, setPlan] = useState<Plan>(initialProfile?.plan ?? PLAN_FREE);
   /** ログインユーザーのメールアドレス */
   const [email, setEmail] = useState<string | null>(initialProfile?.email ?? null);
   /** ログインユーザーの表示名 */
@@ -106,26 +124,26 @@ export function SettingsPage({
         const res = await fetch("/api/v1/me", { headers, credentials: "include" });
         if (cancelled || !res.ok) return;
         const data = (await res.json()) as {
-          plan?: "free" | "deep";
+          plan?: Plan;
           email?: string;
           name?: string;
         };
-        setPlan(data.plan ?? "free");
+        setPlan(data.plan ?? PLAN_FREE);
         setEmail(data.email ?? null);
         setName(data.name ?? null);
-        setSelectedPlan(data.plan ?? "free");
+        setSelectedPlan(data.plan ?? PLAN_FREE);
       } else if (!initialProfile) {
         const res = await fetch("/api/v1/me", { headers, credentials: "include" });
         if (cancelled || !res.ok) return;
         const data = (await res.json()) as {
-          plan?: "free" | "deep";
+          plan?: Plan;
           email?: string;
           name?: string;
         };
-        setPlan(data.plan ?? "free");
+        setPlan(data.plan ?? PLAN_FREE);
         setEmail(data.email ?? null);
         setName(data.name ?? null);
-        setSelectedPlan(data.plan ?? "free");
+        setSelectedPlan(data.plan ?? PLAN_FREE);
       }
     }
     void load();
@@ -203,6 +221,134 @@ export function SettingsPage({
         </h1>
       </div>
 
+      {/* Reflect の使い方（ダイアログ） */}
+      <div className="mb-6 rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-[13px] text-muted-foreground">
+        <Dialog>
+          <DialogTrigger asChild>
+            <button
+              type="button"
+              className="inline-flex items-center gap-2 text-left text-muted-foreground underline-offset-2 hover:underline"
+            >
+              <BookOpen className="h-4 w-4 shrink-0 text-muted-foreground/90" aria-hidden />
+              Reflect の使い方
+            </button>
+          </DialogTrigger>
+          <DialogContent className="flex max-h-[85vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-lg">
+            {/* アイコン列 32px + ギャップ 12px で本文の左端を統一 */}
+            <div className="shrink-0 border-b border-border/50 px-6 pb-4 pt-6 pr-14">
+              <DialogHeader className="p-0 text-left">
+                <div className="grid grid-cols-[2rem_minmax(0,1fr)] items-start gap-x-3">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border/50 bg-muted/60 text-muted-foreground">
+                    <BookOpen className="h-4 w-4" aria-hidden />
+                  </span>
+                  <DialogTitle className="pt-0.5 text-left text-base font-semibold leading-snug tracking-tight text-foreground">
+                    Reflect の使い方
+                  </DialogTitle>
+                </div>
+              </DialogHeader>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6 pt-5">
+              <div className="space-y-6 text-sm">
+                <section className="grid grid-cols-[2rem_minmax(0,1fr)] items-start gap-x-3 gap-y-0">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border/50 bg-muted/50 text-muted-foreground">
+                    <BookOpen className="h-4 w-4" aria-hidden />
+                  </span>
+                  <div className="min-w-0 space-y-1.5">
+                    <h3 className="text-sm font-medium leading-snug text-foreground">
+                      日々のふりかえり
+                    </h3>
+                    <p className="leading-relaxed text-muted-foreground">
+                      気分を選び、その日にその気持ちになった出来事と、なぜそう感じたかを書きます。書き方のコツは、
+                      <Link
+                        href="/journal"
+                        className="text-foreground underline underline-offset-2 hover:text-foreground/80"
+                      >
+                        ふりかえり
+                      </Link>
+                      画面の入力ガイドも参照してください。
+                    </p>
+                  </div>
+                </section>
+                <section className="grid grid-cols-[2rem_minmax(0,1fr)] items-start gap-x-3 gap-y-0">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border/50 bg-muted/50 text-muted-foreground">
+                    <BarChart3 className="h-4 w-4" aria-hidden />
+                  </span>
+                  <div className="min-w-0 space-y-1.5">
+                    <h3 className="text-sm font-medium leading-snug text-foreground">
+                      日次分析と問いかけ
+                    </h3>
+                    <p className="leading-relaxed text-muted-foreground">
+                      保存すると、その日の出来事の分析が表示されます。出てきた問いかけについて、少し考えてみましょう。
+                    </p>
+                  </div>
+                </section>
+                <section className="grid grid-cols-[2rem_minmax(0,1fr)] items-start gap-x-3 gap-y-0">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border/50 bg-muted/50 text-muted-foreground">
+                    <CalendarDays className="h-4 w-4" aria-hidden />
+                  </span>
+                  <div className="min-w-0 space-y-1.5">
+                    <h3 className="text-sm font-medium leading-snug text-foreground">
+                      1週間の継続
+                    </h3>
+                    <p className="leading-relaxed text-muted-foreground">
+                      毎日続けます。Deepプランでは、週の最終日に週次分析が行われ、週次レポートでその週の傾向がわかります。その結果を手がかりに、その週の自分をふりかえりましょう。
+                    </p>
+                  </div>
+                </section>
+                <section className="grid grid-cols-[2rem_minmax(0,1fr)] items-start gap-x-3 gap-y-0">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border/50 bg-muted/50 text-muted-foreground">
+                    <CalendarRange className="h-4 w-4" aria-hidden />
+                  </span>
+                  <div className="min-w-0 space-y-1.5">
+                    <h3 className="text-sm font-medium leading-snug text-foreground">
+                      月次の振り返り
+                      <span className="ml-1.5 align-baseline text-xs font-normal text-muted-foreground">
+                        （Deepプラン）
+                      </span>
+                    </h3>
+                    <p className="leading-relaxed text-muted-foreground">
+                      1か月分がたまると月次分析ができます。その月の自分をふりかえりましょう。
+                    </p>
+                  </div>
+                </section>
+                <section className="grid grid-cols-[2rem_minmax(0,1fr)] items-start gap-x-3 gap-y-0">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border/50 bg-muted/50 text-muted-foreground">
+                    <UserRound className="h-4 w-4" aria-hidden />
+                  </span>
+                  <div className="min-w-0 space-y-1.5">
+                    <h3 className="text-sm font-medium leading-snug text-foreground">
+                      人格サマリー
+                      <span className="ml-1.5 align-baseline text-xs font-normal text-muted-foreground">
+                        （Deepプラン）
+                      </span>
+                    </h3>
+                    <p className="leading-relaxed text-muted-foreground">
+                      ある程度データが蓄積されると、人格サマリーが生成されます。自身の言動と感情のまとめ、強み、リスク、落ち込みやすい条件、回復しやすい行動などを俯瞰できます。
+                    </p>
+                  </div>
+                </section>
+                <section className="grid grid-cols-[2rem_minmax(0,1fr)] items-start gap-x-3 gap-y-0">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border/50 bg-muted/50 text-muted-foreground">
+                    <MessageCircleQuestion className="h-4 w-4" aria-hidden />
+                  </span>
+                  <div className="min-w-0 space-y-1.5">
+                    <h3 className="text-sm font-medium leading-snug text-foreground">
+                      問いかけと次の一歩
+                      <span className="ml-1.5 align-baseline text-xs font-normal text-muted-foreground">
+                        （Deepプラン）
+                      </span>
+                    </h3>
+                    <p className="leading-relaxed text-muted-foreground">
+                      人格サマリーと同時に、次の一歩を踏み出すための問いかけが生成されることがあります。問いかけについて考え、実践できるものは試してみてください。
+                    </p>
+                  </div>
+                </section>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </div>
+
       {/* Profile Section */}
       <div className="rounded-xl border border-border bg-card p-5 mb-6">
         <h2 className="text-xs font-medium uppercase tracking-widest text-muted-foreground mb-4">
@@ -226,7 +372,7 @@ export function SettingsPage({
                 variant="outline"
                 className="text-[10px] px-1.5 py-0 rounded-md"
               >
-                {plan === "deep" ? "Deepプラン" : "Freeプラン"}
+                {plan === PLAN_DEEP ? "Deepプラン" : "Freeプラン"}
               </Badge>
             </div>
           </div>
@@ -242,10 +388,10 @@ export function SettingsPage({
           {/* Free Plan */}
           <button
             type="button"
-            onClick={() => setSelectedPlan("free")}
+            onClick={() => setSelectedPlan(PLAN_FREE)}
             className={cn(
               "text-left rounded-xl border-2 p-5 transition-all flex flex-col cursor-pointer",
-              selectedPlan === "free"
+              selectedPlan === PLAN_FREE
                 ? "border-foreground bg-foreground/5 ring-2 ring-foreground/20"
                 : "border-border bg-card hover:border-foreground/30"
             )}
@@ -254,7 +400,7 @@ export function SettingsPage({
               <h3 className="text-sm font-semibold text-foreground">
                 {freePlan.name}
               </h3>
-              {selectedPlan === "free" && (
+              {selectedPlan === PLAN_FREE && (
                 <div className="flex h-5 w-5 items-center justify-center rounded-full bg-foreground text-background">
                   <Check className="h-3 w-3" />
                 </div>
@@ -283,10 +429,10 @@ export function SettingsPage({
           {/* Deep Plan */}
           <button
             type="button"
-            onClick={() => setSelectedPlan("deep")}
+            onClick={() => setSelectedPlan(PLAN_DEEP)}
             className={cn(
               "text-left rounded-xl border-2 p-5 transition-all relative overflow-hidden flex flex-col cursor-pointer",
-              selectedPlan === "deep"
+              selectedPlan === PLAN_DEEP
                 ? "border-foreground bg-foreground/5 ring-2 ring-foreground/20"
                 : "border-border bg-card hover:border-foreground/30"
             )}
@@ -295,7 +441,7 @@ export function SettingsPage({
               <h3 className="text-sm font-semibold text-foreground">
                 {deepPlan.name}
               </h3>
-              {selectedPlan === "deep" ? (
+              {selectedPlan === PLAN_DEEP ? (
                 <div className="flex h-5 w-5 items-center justify-center rounded-full bg-foreground text-background">
                   <Check className="h-3 w-3" />
                 </div>
@@ -326,7 +472,7 @@ export function SettingsPage({
           </button>
         </div>
 
-        {selectedPlan === "deep" && plan !== "deep" && (
+        {selectedPlan === PLAN_DEEP && plan !== PLAN_DEEP && (
           <button
             type="button"
             onClick={handleUpgrade}
@@ -346,7 +492,7 @@ export function SettingsPage({
       </div>
 
       {/* 利用明細 - Deep ユーザーのみ */}
-      {plan === "deep" && (
+      {plan === PLAN_DEEP && (
         <div className="rounded-xl border border-border bg-card p-5 mb-6">
           <h2 className="text-xs font-medium uppercase tracking-widest text-muted-foreground mb-4">
             利用明細
@@ -401,7 +547,7 @@ export function SettingsPage({
 
         {/* 解約・退会リンク（お問い合わせなどと同じフッター内のテキストリンク） */}
         <div className="mt-4 flex flex-wrap justify-center gap-x-4 gap-y-1 text-[10px]">
-          {plan === "deep" && (
+          {plan === PLAN_DEEP && (
             <button
               type="button"
               onClick={handlePortal}
@@ -436,10 +582,16 @@ export function SettingsPage({
                       headers,
                       credentials: "include",
                     });
+                    const body = (await res.json().catch(() => ({}))) as {
+                      message?: string;
+                    };
                     if (res.ok) {
                       window.location.href = "/goodbye";
                     } else {
-                      setMessage({ type: "error", text: "退会に失敗しました。" });
+                      setMessage({
+                        type: "error",
+                        text: body.message ?? "退会に失敗しました。",
+                      });
                       setDeleteConfirm(false);
                     }
                   } catch {

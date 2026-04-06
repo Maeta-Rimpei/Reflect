@@ -5,6 +5,9 @@ import {
   isSupabaseAdminConfigured,
 } from "@/lib/supabase-admin";
 import { logger } from "@/lib/logger";
+import { FREE_PLAN_HISTORY_DAYS } from "@/constants/limits";
+import { PLAN_DEEP, PLAN_FREE } from "@/constants/plan";
+import type { Plan } from "@/types/plan";
 
 /**
  * 指定期間内にエントリがある日付のリストを返す。認証必須。Free プランは 7 日超で 403。
@@ -43,13 +46,14 @@ export async function GET(req: NextRequest) {
   try {
     const supabase = createSupabaseAdminClient();
 
-    let plan: "free" | "deep" = "free";
+    let plan: Plan = PLAN_FREE;
     const { data: profile } = await supabase
       .from("users")
       .select("plan")
       .eq("id", userId)
       .single();
-    if (profile?.plan === "deep" || profile?.plan === "free") plan = profile.plan;
+    if (profile?.plan === PLAN_DEEP || profile?.plan === PLAN_FREE)
+      plan = profile.plan;
 
     const fromDate = new Date(fromParam);
     const toDate = new Date(toParam);
@@ -60,9 +64,9 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    if (plan === "free") {
+    if (plan === PLAN_FREE) {
       const rangeDays = Math.ceil((toDate.getTime() - fromDate.getTime()) / (24 * 60 * 60 * 1000)) + 1;
-      if (rangeDays > 7) {
+      if (rangeDays > FREE_PLAN_HISTORY_DAYS) {
         return NextResponse.json(
           { error: "plan_limit", message: "Free plan: up to 7 days of history" },
           { status: 403 },

@@ -7,6 +7,11 @@ import {
 } from "@/lib/stripe-subscription";
 import { createSupabaseAdminClient, isSupabaseAdminConfigured } from "@/lib/supabase-admin";
 import { logger } from "@/lib/logger";
+import { PLAN_DEEP } from "@/constants/plan";
+import {
+  isStripeSubscriptionBillingActiveStatus,
+  SUBSCRIPTION_ROW_STATUS_CANCELED,
+} from "@/constants/stripe-subscription";
 
 export async function POST(req: NextRequest) {
   if (!stripe || !STRIPE_WEBHOOK_SECRET) {
@@ -59,7 +64,7 @@ export async function POST(req: NextRequest) {
           const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer?.id;
           const periodEnd = getSubscriptionPeriodEndISO(sub);
 
-          await supabase.from("users").update({ plan: "deep", updated_at: new Date().toISOString() }).eq("id", userId);
+          await supabase.from("users").update({ plan: PLAN_DEEP, updated_at: new Date().toISOString() }).eq("id", userId);
 
           const { error: subError } = await supabase.from("subscriptions").upsert(
             {
@@ -109,9 +114,9 @@ export async function POST(req: NextRequest) {
           await supabase.from("subscriptions").update(subUpdate).eq("user_id", userId);
         }
 
-        if (sub.status === "active" || sub.status === "trialing") {
+        if (isStripeSubscriptionBillingActiveStatus(sub.status)) {
           if (userId) {
-            await supabase.from("users").update({ plan: "deep", updated_at: new Date().toISOString() }).eq("id", userId);
+            await supabase.from("users").update({ plan: PLAN_DEEP, updated_at: new Date().toISOString() }).eq("id", userId);
           }
         }
         break;
@@ -124,7 +129,7 @@ export async function POST(req: NextRequest) {
         const userId = sub.metadata?.user_id;
         const periodEnd = getSubscriptionPeriodEndISO(sub);
         const updatePayload = {
-          status: "canceled",
+          status: SUBSCRIPTION_ROW_STATUS_CANCELED,
           current_period_end: periodEnd,
           updated_at: new Date().toISOString(),
         };

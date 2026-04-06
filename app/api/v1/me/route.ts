@@ -6,6 +6,7 @@ import {
 } from "@/lib/supabase-admin";
 import { getPlan } from "@/lib/get-plan";
 import { logger } from "@/lib/logger";
+import { PLAN_FREE } from "@/constants/plan";
 
 /**
  * ログインユーザーのプロフィール（id, email, name, plan）を返す。
@@ -56,7 +57,7 @@ export async function GET() {
         id: userId,
         email,
         name,
-        plan: "free",
+        plan: PLAN_FREE,
         updated_at: new Date().toISOString(),
       });
     }

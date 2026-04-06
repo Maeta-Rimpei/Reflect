@@ -1,3 +1,4 @@
+import type { Plan } from "@/types/plan";
 import type { JournalAnalysis } from "./journal";
 
 /** 履歴・一覧で使うエントリー1件（API /api/v1/entries の要素） */
@@ -33,8 +34,16 @@ export interface HistoryInitialData {
   isFreeLimit: boolean;
   viewMonth: number;
   viewYear: number;
-  plan: "free" | "deep";
+  plan: Plan;
   /** 種類 B の今月残り回数 */
   journalRegenerationBRemaining: number;
   journalRegenerationBLimit: number;
+}
+
+/** 履歴範囲取得のパラメータ（API と fetchHistoryRangeData で共通） */
+export interface FetchHistoryRangeParams {
+  from: string;
+  to: string;
+  viewMonth: number;
+  viewYear: number;
 }

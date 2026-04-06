@@ -4,12 +4,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getYearMonthInTokyo } from "@/lib/date-utils";
 import {
-  JOURNAL_DAILY_REGENERATION_B_MONTHLY_LIMIT,
-  QUOTA_KEY_JOURNAL_DAILY_REGENERATION_B,
-} from "@/lib/quota-constants";
+  DAILY_JOURNAL_REGENERATION_MONTHLY_LIMIT,
+  QUOTA_KEY_MONTHLY_DAILY_JOURNAL_REGENERATION,
+} from "@/constants/quota";
 
 export function getJournalRegenerationBLimit(): number {
-  return JOURNAL_DAILY_REGENERATION_B_MONTHLY_LIMIT;
+  return DAILY_JOURNAL_REGENERATION_MONTHLY_LIMIT;
 }
 
 /** 種類 B の今月残り回数（東京暦月） */
@@ -31,7 +31,7 @@ export async function getJournalRegenerationBUsed(
     .from("quota_usage")
     .select("used_count")
     .eq("user_id", userId)
-    .eq("quota_key", QUOTA_KEY_JOURNAL_DAILY_REGENERATION_B)
+    .eq("quota_key", QUOTA_KEY_MONTHLY_DAILY_JOURNAL_REGENERATION)
     .eq("period", period)
     .maybeSingle();
 
@@ -49,7 +49,7 @@ export async function incrementJournalRegenerationB(
   const { error } = await supabase.from("quota_usage").upsert(
     {
       user_id: userId,
-      quota_key: QUOTA_KEY_JOURNAL_DAILY_REGENERATION_B,
+      quota_key: QUOTA_KEY_MONTHLY_DAILY_JOURNAL_REGENERATION,
       period,
       used_count: next,
       updated_at: new Date().toISOString(),

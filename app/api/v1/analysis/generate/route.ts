@@ -27,6 +27,7 @@ import {
 } from "@/lib/quota-usage";
 import { truncateCommentForSummary } from "@/lib/string-utils";
 import { PROMPT_VERSIONS } from "@/lib/prompt-versions";
+import { PLAN_DEEP, PLAN_FREE } from "@/constants/plan";
 
 const DEEP_TYPES = ["weekly", "monthly", "yearly", "personality", "question"] as const;
 const ALL_TYPES = ["daily", ...DEEP_TYPES] as const;
@@ -94,9 +95,9 @@ export async function POST(req: NextRequest) {
       .eq("id", userId)
       .single();
       
-    const plan = profile?.plan === "deep" ? "deep" : "free";
+    const plan = profile?.plan === PLAN_DEEP ? PLAN_DEEP : PLAN_FREE;
 
-    if (plan !== "deep") {
+    if (plan !== PLAN_DEEP) {
       return NextResponse.json(
         {
           error: "plan_limit",
@@ -649,8 +650,8 @@ async function retryJournalAnalysis(
       .select("plan")
       .eq("id", userId)
       .single();
-    const plan = profile?.plan === "deep" ? "deep" : "free";
-    if (plan !== "deep") {
+    const plan = profile?.plan === PLAN_DEEP ? PLAN_DEEP : PLAN_FREE;
+    if (plan !== PLAN_DEEP) {
       return NextResponse.json(
         {
           error: "plan_limit",

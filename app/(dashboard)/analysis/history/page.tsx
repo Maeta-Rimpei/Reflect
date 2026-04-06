@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { AnalysisHistoryPage } from "@/components/analysis-history-page";
 import { fetchAnalysisHistoryInitialData } from "@/lib/fetch-analysis-history-initial-data";
 import { getPlan } from "@/lib/get-plan";
+import { PLAN_DEEP } from "@/constants/plan";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +15,7 @@ export default async function AnalysisHistoryPageRoute() {
   }
 
   const plan = await getPlan();
-  if (plan !== "deep") {
+  if (plan !== PLAN_DEEP) {
     redirect("/analysis");
   }
 

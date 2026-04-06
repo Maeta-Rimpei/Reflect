@@ -7,6 +7,8 @@ import {
   isSupabaseAdminConfigured,
 } from "@/lib/supabase-admin";
 import { logger } from "@/lib/logger";
+import { PLAN_DEEP, PLAN_FREE } from "@/constants/plan";
+import { isStripeSubscriptionBillingActiveStatus } from "@/constants/stripe-subscription";
 
 /**
  * Stripe のサブスクリプション状態を DB に同期する。
@@ -43,17 +45,17 @@ export async function POST() {
       // サブスクリプションレコードがなければ free を保証
       await supabase
         .from("users")
-        .update({ plan: "free", updated_at: new Date().toISOString() })
+        .update({ plan: PLAN_FREE, updated_at: new Date().toISOString() })
         .eq("id", userId);
-      return NextResponse.json({ plan: "free" });
+      return NextResponse.json({ plan: PLAN_FREE });
     }
 
     const sub = (await stripe.subscriptions.retrieve(
       subRow.stripe_subscription_id,
     )) as SubscriptionWithPeriod;
 
-    const isActive = sub.status === "active" || sub.status === "trialing";
-    const newPlan = isActive ? "deep" : "free";
+    const isActive = isStripeSubscriptionBillingActiveStatus(sub.status);
+    const newPlan = isActive ? PLAN_DEEP : PLAN_FREE;
 
     await supabase
       .from("users")

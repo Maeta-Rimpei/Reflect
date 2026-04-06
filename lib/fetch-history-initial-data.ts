@@ -17,7 +17,15 @@ import {
   getJournalRegenerationBLimit,
   getJournalRegenerationBRemaining,
 } from "@/lib/quota-usage";
-import type { EntryItem, EmotionRow, HistoryInitialData } from "@/types/entry";
+import { FREE_PLAN_HISTORY_DAYS } from "@/constants/limits";
+import { PLAN_DEEP, PLAN_FREE } from "@/constants/plan";
+import type {
+  EntryItem,
+  EmotionRow,
+  FetchHistoryRangeParams,
+  HistoryInitialData,
+} from "@/types/entry";
+import type { Plan } from "@/types/plan";
 
 function getDaysInMonth(month: number, year: number): number {
   return new Date(year, month + 1, 0).getDate();
@@ -56,14 +64,6 @@ function toYYYYMMDDFromUnknown(v: unknown): string {
   return d.toLocaleDateString("en-CA", { timeZone: "Asia/Tokyo" });
 }
 
-/** 履歴範囲取得のパラメータ（API と初回取得で共通） */
-export interface FetchHistoryRangeParams {
-  from: string;
-  to: string;
-  viewMonth: number;
-  viewYear: number;
-}
-
 /**
  * 指定範囲の履歴データを取得。Free プランで範囲が 7 日超の場合は直近 7 日でフォールバックする。
  * @param userId - 認証済みユーザー ID
@@ -85,7 +85,7 @@ export async function fetchHistoryRangeData(
     isFreeLimit: false,
     viewMonth,
     viewYear,
-    plan: "free" as const,
+    plan: PLAN_FREE,
     journalRegenerationBRemaining: 0,
     journalRegenerationBLimit: getJournalRegenerationBLimit(),
   };
@@ -101,8 +101,10 @@ export async function fetchHistoryRangeData(
     .select("plan")
     .eq("id", userId)
     .single();
-  const plan: "free" | "deep" =
-    profile?.plan === "deep" || profile?.plan === "free" ? profile.plan : "free";
+  const plan: Plan =
+    profile?.plan === PLAN_DEEP || profile?.plan === PLAN_FREE
+      ? profile.plan
+      : PLAN_FREE;
 
   const journalRegenerationBRemaining = await getJournalRegenerationBRemaining(
     supabase,
@@ -114,7 +116,8 @@ export async function fetchHistoryRangeData(
   const rangeDays =
     Math.ceil((toDate.getTime() - fromDate.getTime()) / (24 * 60 * 60 * 1000)) +
     1;
-  const isFreeLimit = plan === "free" && rangeDays > 7;
+  const isFreeLimit =
+    plan === PLAN_FREE && rangeDays > FREE_PLAN_HISTORY_DAYS;
 
   const actualFrom = isFreeLimit
     ? getLast7DaysRangeInTokyo().from

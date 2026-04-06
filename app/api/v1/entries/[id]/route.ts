@@ -6,9 +6,9 @@ import {
 } from "@/lib/supabase-admin";
 import { decrypt, encrypt, isEncryptionConfigured } from "@/lib/crypto";
 import { logger } from "@/lib/logger";
-
-/** ふりかえり本文の最大文字数（新規投稿と揃える） */
-const MAX_BODY_LENGTH_FREE = 800;
+import { MAX_JOURNAL_BODY_LENGTH_FREE } from "@/constants/limits";
+import { PLAN_DEEP, PLAN_FREE } from "@/constants/plan";
+import type { Plan } from "@/types/plan";
 
 export async function GET(
   req: NextRequest,
@@ -155,16 +155,16 @@ export async function PATCH(
       .select("plan")
       .eq("id", userId)
       .single();
-    const plan: "free" | "deep" =
-      profile?.plan === "deep" || profile?.plan === "free"
+    const plan: Plan =
+      profile?.plan === PLAN_DEEP || profile?.plan === PLAN_FREE
         ? profile.plan
-        : "free";
+        : PLAN_FREE;
 
-    if (plan === "free" && hasBody && text.length > MAX_BODY_LENGTH_FREE) {
+    if (plan === PLAN_FREE && hasBody && text.length > MAX_JOURNAL_BODY_LENGTH_FREE) {
       return NextResponse.json(
         {
           error: "validation",
-          message: `Free plan: body must be ${MAX_BODY_LENGTH_FREE} characters or less`,
+          message: `Free plan: body must be ${MAX_JOURNAL_BODY_LENGTH_FREE} characters or less`,
         },
         { status: 400 },
       );

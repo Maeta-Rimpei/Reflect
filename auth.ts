@@ -6,6 +6,7 @@ import {
   isSupabaseAdminConfigured,
 } from "@/lib/supabase-admin";
 import { verifyPassword } from "@/lib/password";
+import { PLAN_FREE } from "@/constants/plan";
 
 /** セッション全体の有効期限（リフレッシュトークン相当）= 30日 */
 const SESSION_MAX_AGE = 60 * 60 * 24 * 30;
@@ -128,7 +129,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           id: newId,
           email,
           email_verified: true,
-          plan: "free",
+          plan: PLAN_FREE,
         });
 
         return { id: newId, email, name: null };
@@ -137,6 +138,13 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   ],
   callbacks: {
     jwt({ token, account, user }) {
+      // middleware(getToken) でメールを参照するため JWT に保持する
+      if (user?.email) {
+        token.email = user.email;
+      }
+      if (user?.name !== undefined) {
+        token.name = user.name;
+      }
       if (account) {
         if (account.provider === "google") {
           // Google の安定した sub をユーザー ID として固定する

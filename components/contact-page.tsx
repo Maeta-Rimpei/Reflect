@@ -5,9 +5,7 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { getApiHeaders } from "@/lib/api-auth";
 import { CONTACT_CATEGORIES, type ContactCategory } from "@/types/contact";
-
-/** お問い合わせ本文の最大文字数 */
-const MAX_BODY = 2000;
+import { MAX_CONTACT_BODY_LENGTH } from "@/constants/limits";
 
 /** 不具合報告用テンプレート（自動挿入） */
 const BUG_REPORT_TEMPLATE = `・不具合が発生したページ：
@@ -137,14 +135,14 @@ export function ContactPage() {
               )}
               <textarea
                 value={body}
-                onChange={(e) => setBody(e.target.value.slice(0, MAX_BODY))}
+                onChange={(e) => setBody(e.target.value.slice(0, MAX_CONTACT_BODY_LENGTH))}
                 required
                 rows={6}
                 placeholder="ご記入ください…"
                 className="w-full rounded-lg border border-border bg-card px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-foreground/20 resize-none"
               />
               <p className="text-[10px] text-muted-foreground mt-1 text-right">
-                {body.length}/{MAX_BODY}
+                {body.length}/{MAX_CONTACT_BODY_LENGTH}
               </p>
             </div>
 

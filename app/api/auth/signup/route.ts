@@ -7,6 +7,7 @@ import {
 import { hashPassword } from "@/lib/password";
 import { getResend, isResendConfigured, MAIL_FROM } from "@/lib/resend";
 import { logger } from "@/lib/logger";
+import { PLAN_FREE } from "@/constants/plan";
 
 const TOKEN_EXPIRY_MINUTES = 60;
 
@@ -115,7 +116,7 @@ export async function POST(req: NextRequest) {
         name,
         password_hash: passwordHash,
         email_verified: false,
-        plan: "free",
+        plan: PLAN_FREE,
       });
 
       if (insertError) {

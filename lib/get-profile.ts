@@ -5,6 +5,7 @@ import {
 } from "@/lib/supabase-admin";
 import { getPlan } from "@/lib/get-plan";
 import type { ServerProfile } from "@/types/profile";
+import { PLAN_FREE } from "@/constants/plan";
 
 /**
  * サーバー側で現在のユーザーのプロフィール（plan, email, name）を取得する。
@@ -12,7 +13,7 @@ import type { ServerProfile } from "@/types/profile";
  */
 export async function getProfile(): Promise<ServerProfile> {
   const defaultProfile: ServerProfile = {
-    plan: "free",
+    plan: PLAN_FREE,
     email: null,
     name: null,
   };
@@ -52,7 +53,7 @@ export async function getProfile(): Promise<ServerProfile> {
         id: userId,
         email,
         name,
-        plan: "free",
+        plan: PLAN_FREE,
         updated_at: new Date().toISOString(),
       });
     }

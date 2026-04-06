@@ -6,9 +6,12 @@ import {
 } from "@/lib/supabase-admin";
 import { encrypt, decrypt, isEncryptionConfigured } from "@/lib/crypto";
 import { logger } from "@/lib/logger";
-
-/** Free プラン時の本文最大文字数 */
-const MAX_BODY_LENGTH_FREE = 800;
+import {
+  FREE_PLAN_HISTORY_DAYS,
+  MAX_JOURNAL_BODY_LENGTH_FREE,
+} from "@/constants/limits";
+import { PLAN_DEEP, PLAN_FREE } from "@/constants/plan";
+import type { Plan } from "@/types/plan";
 
 /**
  * ふりかえりエントリを1件保存する。
@@ -57,7 +60,7 @@ export async function POST(req: NextRequest) {
         id: userId,
         email,
         name,
-        plan: "free",
+        plan: PLAN_FREE,
         updated_at: new Date().toISOString(),
       });
     }
@@ -84,19 +87,20 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    let plan: "free" | "deep" = "free";
+    let plan: Plan = PLAN_FREE;
     const { data: profile } = await supabase
       .from("users")
       .select("plan")
       .eq("id", userId)
       .single();
-    if (profile?.plan === "deep" || profile?.plan === "free") plan = profile.plan;
+    if (profile?.plan === PLAN_DEEP || profile?.plan === PLAN_FREE)
+      plan = profile.plan;
 
-    if (plan === "free" && text.length > MAX_BODY_LENGTH_FREE) {
+    if (plan === PLAN_FREE && text.length > MAX_JOURNAL_BODY_LENGTH_FREE) {
       return NextResponse.json(
         {
           error: "validation",
-          message: `Free plan: body must be ${MAX_BODY_LENGTH_FREE} characters or less`,
+          message: `Free plan: body must be ${MAX_JOURNAL_BODY_LENGTH_FREE} characters or less`,
         },
         { status: 400 },
       );
@@ -216,13 +220,14 @@ export async function GET(req: NextRequest) {
   try {
     const supabase = createSupabaseAdminClient();
 
-    let plan: "free" | "deep" = "free";
+    let plan: Plan = PLAN_FREE;
     const { data: profile } = await supabase
       .from("users")
       .select("plan")
       .eq("id", userId)
       .single();
-    if (profile?.plan === "deep" || profile?.plan === "free") plan = profile.plan;
+    if (profile?.plan === PLAN_DEEP || profile?.plan === PLAN_FREE)
+      plan = profile.plan;
 
     const fromDate = new Date(fromParam);
     const toDate = new Date(toParam);
@@ -233,9 +238,9 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    if (plan === "free") {
+    if (plan === PLAN_FREE) {
       const rangeDays = Math.ceil((toDate.getTime() - fromDate.getTime()) / (24 * 60 * 60 * 1000)) + 1;
-      if (rangeDays > 7) {
+      if (rangeDays > FREE_PLAN_HISTORY_DAYS) {
         // Free は 7 日を超える範囲は 403
         return NextResponse.json(
           { error: "plan_limit", message: "Free plan: up to 7 days of history" },

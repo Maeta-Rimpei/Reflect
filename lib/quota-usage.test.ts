@@ -6,7 +6,7 @@ import {
   getJournalRegenerationBRemaining,
   incrementJournalRegenerationB,
 } from "@/lib/quota-usage";
-import { QUOTA_KEY_JOURNAL_DAILY_REGENERATION_B } from "@/lib/quota-constants";
+import { QUOTA_KEY_MONTHLY_DAILY_JOURNAL_REGENERATION } from "@/constants/quota";
 
 vi.mock("@/lib/date-utils", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/date-utils")>();
@@ -26,7 +26,7 @@ function mockSelectChain(row: { used_count: number } | null) {
 }
 
 describe("getJournalRegenerationBLimit", () => {
-  it("quota-constants と一致", () => {
+  it("DAILY_JOURNAL_REGENERATION_MONTHLY_LIMIT と一致", () => {
     expect(getJournalRegenerationBLimit()).toBe(3);
   });
 });
@@ -43,7 +43,7 @@ describe("getJournalRegenerationBUsed", () => {
     expect(supabase.from).toHaveBeenCalledWith("quota_usage");
     expect(chain.eq).toHaveBeenCalledWith(
       "quota_key",
-      QUOTA_KEY_JOURNAL_DAILY_REGENERATION_B,
+      QUOTA_KEY_MONTHLY_DAILY_JOURNAL_REGENERATION,
     );
     expect(chain.eq).toHaveBeenCalledWith("period", "2025-03");
   });
@@ -87,7 +87,7 @@ describe("incrementJournalRegenerationB", () => {
       expect.objectContaining({
         user_id: "user-1",
         used_count: 2,
-        quota_key: QUOTA_KEY_JOURNAL_DAILY_REGENERATION_B,
+        quota_key: QUOTA_KEY_MONTHLY_DAILY_JOURNAL_REGENERATION,
         period: "2025-03",
       }),
       { onConflict: "user_id,quota_key,period" },

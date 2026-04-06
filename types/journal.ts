@@ -1,3 +1,4 @@
+import type { Plan } from "@/types/plan";
 import type { GeminiJournalAnalysisPayload } from "./gemini";
 
 /** ジャーナル分析結果（AI簡易分析）。generateJournalAnalysis の戻り値と同一 */
@@ -30,7 +31,7 @@ export interface JournalInitialData {
   streakDates: string[];
   todayEntry: TodayEntry | null;
   analysis: JournalAnalysis | null;
-  plan: "free" | "deep";
+  plan: Plan;
   /** DB に日次分析が保存されているか（種類 A / B の表示分岐） */
   hasDailyAnalysis: boolean;
   /** 種類 B（成功後の再分析）の今月残り回数（東京暦月） */

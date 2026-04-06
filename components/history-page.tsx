@@ -10,6 +10,9 @@ import {
   toYmdInTokyo,
 } from "@/lib/date-utils";
 import type { EntryItem, EmotionRow, HistoryInitialData } from "@/types/entry";
+import { MAX_JOURNAL_BODY_LENGTH_FREE } from "@/constants/limits";
+import { PLAN_DEEP, PLAN_FREE } from "@/constants/plan";
+import type { Plan } from "@/types/plan";
 
 /** 曜日ラベル（日〜土） */
 const WEEKDAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"] as const;
@@ -31,9 +34,6 @@ const MOOD_COLOR: Record<string, string> = {
   low: "bg-foreground/20",
   bad: "bg-foreground/10",
 };
-
-/** 本文の最大文字数（Free プラン・ジャーナルと同様） */
-const MAX_BODY_FREE = 800;
 
 /** 指定年月の日数を返す（0-indexed month） */
 function getDaysInMonth(month: number, year: number) {
@@ -77,7 +77,7 @@ export function HistoryPage({
   const [loading, setLoading] = useState(!initialData);
   /** Free プランで 7 日制限がかかっているか（true のとき直近7日のみ表示） */
   const [isFreeLimit, setIsFreeLimit] = useState(initialData?.isFreeLimit ?? false);
-  const [plan, setPlan] = useState<"free" | "deep">(initialData?.plan ?? "free");
+  const [plan, setPlan] = useState<Plan>(initialData?.plan ?? PLAN_FREE);
   const [journalRegenerationBRemaining, setJournalRegenerationBRemaining] = useState(
     initialData?.journalRegenerationBRemaining ?? 0,
   );
@@ -116,7 +116,7 @@ export function HistoryPage({
       setEmotions(initialData.emotions ?? []);
       setEntryDates(new Set(initialData.entryDates ?? []));
       setIsFreeLimit(initialData.isFreeLimit ?? false);
-      setPlan(initialData.plan ?? "free");
+      setPlan(initialData.plan ?? PLAN_FREE);
       setJournalRegenerationBRemaining(initialData.journalRegenerationBRemaining ?? 0);
       setJournalRegenerationBLimit(initialData.journalRegenerationBLimit ?? 3);
       return;
@@ -139,7 +139,7 @@ export function HistoryPage({
         setEmotions(data.emotions ?? []);
         setEntryDates(new Set(data.entryDates ?? []));
         setIsFreeLimit(data.isFreeLimit ?? false);
-        setPlan(data.plan ?? "free");
+        setPlan(data.plan ?? PLAN_FREE);
         setJournalRegenerationBRemaining(data.journalRegenerationBRemaining ?? 0);
         setJournalRegenerationBLimit(data.journalRegenerationBLimit ?? 3);
       })
@@ -233,7 +233,7 @@ export function HistoryPage({
     inThisWeek &&
     selectedEntry &&
     selectedEntry.hasDailyAnalysis &&
-    plan === "deep" &&
+    plan === PLAN_DEEP &&
     journalRegenerationBRemaining > 0;
 
   /** 今週かつ、種類 A（未取得）または種類 B（Deep・枠あり）で再分析可能 */
@@ -242,10 +242,10 @@ export function HistoryPage({
   const saveAndReanalyzeDisabledReason = selectedEntry
     ? !inThisWeek
       ? "今週（月曜始まり）のふりかえりのみ再分析できます。"
-      : selectedEntry.hasDailyAnalysis && plan === "free"
+      : selectedEntry.hasDailyAnalysis && plan === PLAN_FREE
         ? "分析のやり直しには Deep プランが必要です。"
         : selectedEntry.hasDailyAnalysis &&
-            plan === "deep" &&
+            plan === PLAN_DEEP &&
             journalRegenerationBRemaining === 0
           ? "今月の再分析の上限に達しています。"
           : null
@@ -271,7 +271,7 @@ export function HistoryPage({
             "今週（月曜始まり）のふりかえりのみ、再分析を実行できます。",
           ],
         }
-      : selectedEntry.hasDailyAnalysis && plan === "free"
+      : selectedEntry.hasDailyAnalysis && plan === PLAN_FREE
         ? {
             title: "再分析できません",
             lines: [
@@ -280,7 +280,7 @@ export function HistoryPage({
             ],
           }
         : selectedEntry.hasDailyAnalysis &&
-            plan === "deep" &&
+            plan === PLAN_DEEP &&
             journalRegenerationBRemaining === 0
           ? {
               title: "再分析できません",
@@ -376,8 +376,8 @@ export function HistoryPage({
       return;
     }
     let body = editBody.trim();
-    if (plan === "free" && body.length > MAX_BODY_FREE) {
-      setEditError(`本文は ${MAX_BODY_FREE} 文字以内にしてください。`);
+    if (plan === PLAN_FREE && body.length > MAX_JOURNAL_BODY_LENGTH_FREE) {
+      setEditError(`本文は ${MAX_JOURNAL_BODY_LENGTH_FREE} 文字以内にしてください。`);
       return;
     }
     setEditSubmitMode(withReanalyze ? "saveAndReanalyze" : "save");
@@ -692,17 +692,17 @@ export function HistoryPage({
                 value={editBody}
                 onChange={(e) =>
                   setEditBody(
-                    plan === "free"
-                      ? e.target.value.slice(0, MAX_BODY_FREE)
+                    plan === PLAN_FREE
+                      ? e.target.value.slice(0, MAX_JOURNAL_BODY_LENGTH_FREE)
                       : e.target.value,
                   )
                 }
                 className="w-full min-h-[260px] resize-none border-0 bg-transparent p-3 text-sm leading-relaxed text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-0"
               />
             </div>
-            {plan === "free" && (
+            {plan === PLAN_FREE && (
               <p className="text-[10px] text-muted-foreground mb-4 text-right">
-                {editBody.length}/{MAX_BODY_FREE}
+                {editBody.length}/{MAX_JOURNAL_BODY_LENGTH_FREE}
               </p>
             )}
 

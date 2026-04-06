@@ -12,13 +12,12 @@ import {
   getPeriodLabel,
 } from "@/lib/date-utils";
 import type {
+  AnalysisDeepTabType,
   AnalysisHistoryInitialData,
   AnalysisHistoryMiscItem,
   AnalysisReportItem,
   PersonalityData,
 } from "@/types/analysis";
-
-type TabType = "weekly" | "monthly" | "yearly" | "personality" | "question";
 
 /** 年でグループ化（週次・月次は period.from の年、年次は period.to の年）。年の降順。 */
 function groupItemsByYear(
@@ -75,7 +74,7 @@ export function AnalysisHistoryPage({
 }: {
   initialData: AnalysisHistoryInitialData;
 }) {
-  const [activeTab, setActiveTab] = useState<TabType>("weekly");
+  const [activeTab, setActiveTab] = useState<AnalysisDeepTabType>("weekly");
   const [selectedReport, setSelectedReport] = useState<AnalysisReportItem | null>(null);
   const [selectedMisc, setSelectedMisc] = useState<AnalysisHistoryMiscItem | null>(null);
 
@@ -111,7 +110,7 @@ export function AnalysisHistoryPage({
       <Tabs
         value={activeTab}
         onValueChange={(v) => {
-          setActiveTab(v as TabType);
+          setActiveTab(v as AnalysisDeepTabType);
           clearSelection();
         }}
         className="space-y-6"

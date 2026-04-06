@@ -17,6 +17,8 @@ import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { RippleMotif } from "@/components/ripple-motif";
 import PageLoadingSkeleton from "@/components/page-loading-skeleton";
+import { PLAN_DEEP } from "@/constants/plan";
+import type { Plan } from "@/types/plan";
 
 const navigation = [
   { name: "今日のふりかえり", shortName: "ふりかえり", href: "/journal", icon: PenLine },
@@ -32,7 +34,7 @@ export function AppShell({
 }: {
   children: React.ReactNode;
   /** サーバーで取得したプラン（各ページの Server Component で getPlan() 等から渡す） */
-  plan: "free" | "deep";
+  plan: Plan;
 }) {
   const pathname = usePathname();
   const [isNavigating, setIsNavigating] = useState(false);
@@ -74,7 +76,7 @@ export function AppShell({
                   >
                     <item.icon className="h-4 w-4" />
                     <span>{item.name}</span>
-                    {item.deep && plan !== "deep" && (
+                    {item.deep && plan !== PLAN_DEEP && (
                       <Badge
                         variant="outline"
                         className="ml-auto text-[10px] px-1.5 py-0"
@@ -102,7 +104,7 @@ export function AppShell({
           </button>
         </div>
 
-        {plan !== "deep" && (
+        {plan !== PLAN_DEEP && (
           <div className="border-t border-border p-4">
             <div className="rounded-lg border border-border bg-secondary/50 p-4">
               <div className="flex items-center gap-2 mb-2">
@@ -163,7 +165,7 @@ export function AppShell({
                     className={cn("h-5 w-5 shrink-0", isActive && "text-foreground")}
                     strokeWidth={isActive ? 2.25 : 1.75}
                   />
-                  {item.deep && plan !== "deep" && (
+                  {item.deep && plan !== PLAN_DEEP && (
                     <span className="absolute -top-0.5 -right-1.5 h-1.5 w-1.5 rounded-full bg-foreground/50" />
                   )}
                 </span>

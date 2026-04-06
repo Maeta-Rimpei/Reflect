@@ -1,3 +1,5 @@
+import type { Plan } from "@/types/plan";
+
 /** 週次レポートの payload */
 export interface WeeklyPayload {
   /** 今週多く見られた感情（最大3件） */
@@ -61,7 +63,7 @@ export interface PersonalityData {
 
 /** 分析ページの初回表示用データ（サーバー取得） */
 export interface AnalysisInitialData {
-  plan: "free" | "deep";
+  plan: Plan;
   weeklyReport: {
     period: { from: string; to: string };
     payload: WeeklyPayload;
@@ -77,6 +79,33 @@ export interface AnalysisInitialData {
   personalitySummary: PersonalityData | null;
   questions: string[];
 }
+
+/** plan は別取得する場合の分析ページ初期データ（例: fetchAnalysisInitialData） */
+export type AnalysisInitialDataWithoutPlan = Omit<AnalysisInitialData, "plan">;
+
+/** 分析ページのクライアント state（週次・月次・年次レポート） */
+export type WeeklyReportState = {
+  period: { from: string; to: string };
+  payload: WeeklyPayload;
+} | null;
+
+export type MonthlyReportState = {
+  period: { from: string; to: string };
+  payload: MonthlyPayload;
+} | null;
+
+export type YearlyReportState = {
+  period: { from: string; to: string };
+  payload: YearlyPayload;
+} | null;
+
+/** 分析ページ・履歴の Deep 系タブ */
+export type AnalysisDeepTabType =
+  | "weekly"
+  | "monthly"
+  | "yearly"
+  | "personality"
+  | "question";
 
 /** レポート履歴1件（API /api/v1/analysis の要素） */
 export interface AnalysisReportItem {

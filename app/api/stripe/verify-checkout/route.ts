@@ -7,6 +7,7 @@ import {
   isSupabaseAdminConfigured,
 } from "@/lib/supabase-admin";
 import { logger } from "@/lib/logger";
+import { PLAN_DEEP } from "@/constants/plan";
 
 /**
  * Checkout 完了後にクライアントから呼ばれ、Stripe の session を検証して DB を更新する。
@@ -67,7 +68,7 @@ export async function POST(req: NextRequest) {
     // users テーブルを deep に更新
     await supabase
       .from("users")
-      .update({ plan: "deep", updated_at: new Date().toISOString() })
+      .update({ plan: PLAN_DEEP, updated_at: new Date().toISOString() })
       .eq("id", userId);
 
     // subscriptions テーブルも更新（Webhook と同じ処理、冪等）
@@ -102,7 +103,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ plan: "deep" });
+    return NextResponse.json({ plan: PLAN_DEEP });
   } catch (e) {
     logger.errorException("[stripe verify-checkout] チェックアウト検証でエラー", e, {
       userId: session.user.id,

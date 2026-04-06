@@ -6,6 +6,7 @@ import {
 } from "@/lib/supabase-admin";
 import { getResend, isResendConfigured, MAIL_FROM } from "@/lib/resend";
 import { logger } from "@/lib/logger";
+import { MAX_CONTACT_BODY_LENGTH } from "@/constants/limits";
 
 function escapeHtml(s: string): string {
   return s
@@ -18,9 +19,6 @@ function escapeHtml(s: string): string {
 
 /** 許可するお問い合わせカテゴリ（DB の CHECK と一致） */
 const CATEGORIES = ["bug", "billing", "account", "feature", "other"] as const;
-/** 本文の最大文字数 */
-const MAX_BODY_LENGTH = 2000;
-
 /**
  * お問い合わせを1件保存する。認証必須。
  * @param req - JSON body: { category: ContactCategory, body: string }
@@ -65,9 +63,9 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
-    if (text.length > MAX_BODY_LENGTH) {
+    if (text.length > MAX_CONTACT_BODY_LENGTH) {
       return NextResponse.json(
-        { error: "validation", message: `本文は${MAX_BODY_LENGTH}文字以内で入力してください。` },
+        { error: "validation", message: `本文は${MAX_CONTACT_BODY_LENGTH}文字以内で入力してください。` },
         { status: 400 }
       );
     }
