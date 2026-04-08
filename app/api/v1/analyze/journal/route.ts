@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { generateJournalAnalysis } from "@/lib/gemini";
+import { generateJournalAnalysis, isGeminiRetryableError } from "@/lib/gemini";
 import { logger } from "@/lib/logger";
 
 export async function POST(req: NextRequest) {
@@ -26,6 +26,17 @@ export async function POST(req: NextRequest) {
     logger.errorException("[analyze/journal] ジャーナル分析でエラー", error, {
       inputTextLength,
     });
+
+    if (isGeminiRetryableError(error)) {
+      return NextResponse.json(
+        {
+          error: "upstream_unavailable",
+          message:
+            "分析に失敗しました。しばらく経ってから再度お試しください。",
+        },
+        { status: 503 },
+      );
+    }
 
     const message =
       error instanceof Error ? error.message : "Unknown error occurred";

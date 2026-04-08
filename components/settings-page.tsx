@@ -5,27 +5,10 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { Badge } from "@/components/ui/badge";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+import { ReflectUsageGuide } from "@/components/reflect-usage-guide";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
-import {
-  ArrowRight,
-  BarChart3,
-  BookOpen,
-  CalendarDays,
-  CalendarRange,
-  Check,
-  Loader2,
-  LogOut,
-  MessageCircleQuestion,
-  UserRound,
-} from "lucide-react";
+import { ArrowRight, Check, Loader2, LogOut } from "lucide-react";
 import { getApiHeaders } from "@/lib/api-auth";
 import { PLAN_DEEP, PLAN_FREE } from "@/constants/plan";
 import type { Plan } from "@/types/plan";
@@ -221,133 +204,7 @@ export function SettingsPage({
         </h1>
       </div>
 
-      {/* Reflect の使い方（ダイアログ） */}
-      <div className="mb-6 rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-[13px] text-muted-foreground">
-        <Dialog>
-          <DialogTrigger asChild>
-            <button
-              type="button"
-              className="inline-flex items-center gap-2 text-left text-muted-foreground underline-offset-2 hover:underline"
-            >
-              <BookOpen className="h-4 w-4 shrink-0 text-muted-foreground/90" aria-hidden />
-              Reflect の使い方
-            </button>
-          </DialogTrigger>
-          <DialogContent className="flex max-h-[85vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-lg">
-            {/* アイコン列 32px + ギャップ 12px で本文の左端を統一 */}
-            <div className="shrink-0 border-b border-border/50 px-6 pb-4 pt-6 pr-14">
-              <DialogHeader className="p-0 text-left">
-                <div className="grid grid-cols-[2rem_minmax(0,1fr)] items-start gap-x-3">
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border/50 bg-muted/60 text-muted-foreground">
-                    <BookOpen className="h-4 w-4" aria-hidden />
-                  </span>
-                  <DialogTitle className="pt-0.5 text-left text-base font-semibold leading-snug tracking-tight text-foreground">
-                    Reflect の使い方
-                  </DialogTitle>
-                </div>
-              </DialogHeader>
-            </div>
-            <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6 pt-5">
-              <div className="space-y-6 text-sm">
-                <section className="grid grid-cols-[2rem_minmax(0,1fr)] items-start gap-x-3 gap-y-0">
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border/50 bg-muted/50 text-muted-foreground">
-                    <BookOpen className="h-4 w-4" aria-hidden />
-                  </span>
-                  <div className="min-w-0 space-y-1.5">
-                    <h3 className="text-sm font-medium leading-snug text-foreground">
-                      日々のふりかえり
-                    </h3>
-                    <p className="leading-relaxed text-muted-foreground">
-                      気分を選び、その日にその気持ちになった出来事と、なぜそう感じたかを書きます。書き方のコツは、
-                      <Link
-                        href="/journal"
-                        className="text-foreground underline underline-offset-2 hover:text-foreground/80"
-                      >
-                        ふりかえり
-                      </Link>
-                      画面の入力ガイドも参照してください。
-                    </p>
-                  </div>
-                </section>
-                <section className="grid grid-cols-[2rem_minmax(0,1fr)] items-start gap-x-3 gap-y-0">
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border/50 bg-muted/50 text-muted-foreground">
-                    <BarChart3 className="h-4 w-4" aria-hidden />
-                  </span>
-                  <div className="min-w-0 space-y-1.5">
-                    <h3 className="text-sm font-medium leading-snug text-foreground">
-                      日次分析と問いかけ
-                    </h3>
-                    <p className="leading-relaxed text-muted-foreground">
-                      保存すると、その日の出来事の分析が表示されます。出てきた問いかけについて、少し考えてみましょう。
-                    </p>
-                  </div>
-                </section>
-                <section className="grid grid-cols-[2rem_minmax(0,1fr)] items-start gap-x-3 gap-y-0">
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border/50 bg-muted/50 text-muted-foreground">
-                    <CalendarDays className="h-4 w-4" aria-hidden />
-                  </span>
-                  <div className="min-w-0 space-y-1.5">
-                    <h3 className="text-sm font-medium leading-snug text-foreground">
-                      1週間の継続
-                    </h3>
-                    <p className="leading-relaxed text-muted-foreground">
-                      毎日続けます。Deepプランでは、週の最終日に週次分析が行われ、週次レポートでその週の傾向がわかります。その結果を手がかりに、その週の自分をふりかえりましょう。
-                    </p>
-                  </div>
-                </section>
-                <section className="grid grid-cols-[2rem_minmax(0,1fr)] items-start gap-x-3 gap-y-0">
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border/50 bg-muted/50 text-muted-foreground">
-                    <CalendarRange className="h-4 w-4" aria-hidden />
-                  </span>
-                  <div className="min-w-0 space-y-1.5">
-                    <h3 className="text-sm font-medium leading-snug text-foreground">
-                      月次の振り返り
-                      <span className="ml-1.5 align-baseline text-xs font-normal text-muted-foreground">
-                        （Deepプラン）
-                      </span>
-                    </h3>
-                    <p className="leading-relaxed text-muted-foreground">
-                      1か月分がたまると月次分析ができます。その月の自分をふりかえりましょう。
-                    </p>
-                  </div>
-                </section>
-                <section className="grid grid-cols-[2rem_minmax(0,1fr)] items-start gap-x-3 gap-y-0">
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border/50 bg-muted/50 text-muted-foreground">
-                    <UserRound className="h-4 w-4" aria-hidden />
-                  </span>
-                  <div className="min-w-0 space-y-1.5">
-                    <h3 className="text-sm font-medium leading-snug text-foreground">
-                      人格サマリー
-                      <span className="ml-1.5 align-baseline text-xs font-normal text-muted-foreground">
-                        （Deepプラン）
-                      </span>
-                    </h3>
-                    <p className="leading-relaxed text-muted-foreground">
-                      ある程度データが蓄積されると、人格サマリーが生成されます。自身の言動と感情のまとめ、強み、リスク、落ち込みやすい条件、回復しやすい行動などを俯瞰できます。
-                    </p>
-                  </div>
-                </section>
-                <section className="grid grid-cols-[2rem_minmax(0,1fr)] items-start gap-x-3 gap-y-0">
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border/50 bg-muted/50 text-muted-foreground">
-                    <MessageCircleQuestion className="h-4 w-4" aria-hidden />
-                  </span>
-                  <div className="min-w-0 space-y-1.5">
-                    <h3 className="text-sm font-medium leading-snug text-foreground">
-                      問いかけと次の一歩
-                      <span className="ml-1.5 align-baseline text-xs font-normal text-muted-foreground">
-                        （Deepプラン）
-                      </span>
-                    </h3>
-                    <p className="leading-relaxed text-muted-foreground">
-                      人格サマリーと同時に、次の一歩を踏み出すための問いかけが生成されることがあります。問いかけについて考え、実践できるものは試してみてください。
-                    </p>
-                  </div>
-                </section>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
-      </div>
+      <ReflectUsageGuide />
 
       {/* Profile Section */}
       <div className="rounded-xl border border-border bg-card p-5 mb-6">

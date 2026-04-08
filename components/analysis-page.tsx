@@ -28,6 +28,18 @@ import type {
 import { PLAN_DEEP, PLAN_FREE } from "@/constants/plan";
 import type { Plan } from "@/types/plan";
 
+/** 生成中バナー用ラベル */
+const GENERATING_LABEL: Record<
+  "weekly" | "monthly" | "yearly" | "personality" | "question",
+  string
+> = {
+  weekly: "週次レポート",
+  monthly: "月次レポート",
+  yearly: "年次レポート",
+  personality: "人格サマリー",
+  question: "問いかけ",
+};
+
 /** 週次・月次・人格・問いかけの分析レポートを表示するページコンポーネント */
 export function AnalysisPage({
   initialData,
@@ -416,7 +428,20 @@ export function AnalysisPage({
   if (loading) {
     return (
       <div className="mx-auto max-w-2xl px-4 py-8 md:px-6 md:py-12">
-        <p className="text-sm text-muted-foreground">読み込み中…</p>
+        <div
+          className="flex flex-col items-center justify-center gap-3 py-12 text-center"
+          role="status"
+          aria-live="polite"
+          aria-label="分析レポートを読み込み中"
+        >
+          <Loader2 className="h-9 w-9 animate-spin text-foreground/70" aria-hidden />
+          <div className="space-y-1">
+            <p className="text-sm font-medium text-foreground">読み込み中です</p>
+            <p className="text-xs text-muted-foreground max-w-xs leading-relaxed">
+              レポートの情報を取得しています。しばらくお待ちください。
+            </p>
+          </div>
+        </div>
       </div>
     );
   }
@@ -475,6 +500,28 @@ export function AnalysisPage({
           </Link>
         )}
       </div>
+
+      {generating && (
+        <div
+          className="mb-4 rounded-lg border border-border bg-muted/50 px-4 py-3 flex gap-3 text-left"
+          role="status"
+          aria-live="polite"
+          aria-busy="true"
+        >
+          <Loader2
+            className="h-5 w-5 shrink-0 animate-spin text-foreground/70 mt-0.5"
+            aria-hidden
+          />
+          <div className="min-w-0 space-y-1">
+            <p className="text-sm font-medium text-foreground">
+              {GENERATING_LABEL[generating]}を生成しています
+            </p>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              AIの応答まで数十秒〜1分ほどかかることがあります。この画面のままお待ちください。
+            </p>
+          </div>
+        </div>
+      )}
 
       {generateError && (
         <div className="mb-4 rounded-lg border border-red-600/50 bg-destructive/10 px-4 py-3 text-xs text-destructive space-y-2">
@@ -772,11 +819,22 @@ function EmptyState({
         type="button"
         onClick={onClick}
         disabled={loading}
-        className="rounded-xl bg-foreground text-background px-6 py-2.5 text-sm font-medium hover:bg-foreground/90 disabled:opacity-50 flex items-center justify-center gap-2 mx-auto cursor-pointer"
+        className="rounded-xl bg-foreground text-background px-6 py-2.5 text-sm font-medium hover:bg-foreground/90 disabled:opacity-90 flex items-center justify-center gap-2 mx-auto cursor-pointer min-w-[12rem]"
       >
-        {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-        {buttonLabel}
+        {loading ? (
+          <>
+            <Loader2 className="h-4 w-4 animate-spin shrink-0" aria-hidden />
+            生成中…
+          </>
+        ) : (
+          buttonLabel
+        )}
       </button>
+      {loading ? (
+        <p className="mt-4 text-[11px] text-muted-foreground leading-relaxed max-w-sm mx-auto">
+          画面上部にも進捗を表示しています。混雑時は完了まで1分ほどかかることがあります。
+        </p>
+      ) : null}
     </div>
   );
 }

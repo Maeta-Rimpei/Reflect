@@ -11,6 +11,7 @@ import {
   generatePersonalitySummary,
   generateQuestions,
   generateYearlyAnalysis,
+  isGeminiRetryableError,
 } from "@/lib/gemini";
 import { decrypt, isEncryptionConfigured } from "@/lib/crypto";
 import { logger } from "@/lib/logger";
@@ -519,6 +520,16 @@ export async function POST(req: NextRequest) {
       requestType,
       entryId: entryIdForLog,
     });
+    if (isGeminiRetryableError(e)) {
+      return NextResponse.json(
+        {
+          error: "upstream_unavailable",
+          message:
+            "分析に失敗しました。しばらく経ってから再度お試しください。",
+        },
+        { status: 503 },
+      );
+    }
     return NextResponse.json(
       { error: "internal", message: "分析の生成に失敗しました。" },
       { status: 500 },
@@ -691,6 +702,16 @@ async function retryJournalAnalysis(
         journalBodyLength: plainBody.length,
       },
     );
+    if (isGeminiRetryableError(e)) {
+      return NextResponse.json(
+        {
+          error: "upstream_unavailable",
+          message:
+            "分析に失敗しました。しばらく経ってから再度お試しください。",
+        },
+        { status: 503 },
+      );
+    }
     return NextResponse.json(
       { error: "internal", message: "分析の生成に失敗しました。" },
       { status: 500 },

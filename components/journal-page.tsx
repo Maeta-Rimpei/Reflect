@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { RippleMotif } from "@/components/ripple-motif";
@@ -106,6 +106,8 @@ export function JournalPage({
   const [isSaved, setIsSaved] = useState(Boolean(initialData.todayEntry));
   /** 保存時のAI分析リクエスト中か */
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  /** 分析が長引いたときの補足（混雑時の目安） */
+  const [analysisSlowHint, setAnalysisSlowHint] = useState(false);
   /** 「AI分析を再試行」実行中か */
   const [isRetrying, setIsRetrying] = useState(false);
   /** 分析エラー時のメッセージ */
@@ -131,6 +133,15 @@ export function JournalPage({
   const journalRegenerationBLimit = initialData.journalRegenerationBLimit;
   /** 「より良い分析をするためのヒント」ダイアログの表示 */
   const [hintDialogOpen, setHintDialogOpen] = useState(false);
+
+  useEffect(() => {
+    if (!isAnalyzing && !isRetrying) {
+      setAnalysisSlowHint(false);
+      return;
+    }
+    const id = window.setTimeout(() => setAnalysisSlowHint(true), 8000);
+    return () => window.clearTimeout(id);
+  }, [isAnalyzing, isRetrying]);
 
   const today = getTodayInTokyo();
   const streakDays = getCurrentStreak(today, datesWithEntries);
@@ -562,8 +573,13 @@ export function JournalPage({
                     {isRetrying ? "日次分析を再実行しています" : "日次分析を実行しています"}
                   </p>
                   <p className="text-xs text-muted-foreground leading-relaxed max-w-sm mx-auto">
-                    ふりかえりを分析しています。完了まで数秒かかることがあります。この画面のままお待ちください。
+                    保存が終わり、AIがふりかえりを読み取っています。この画面のままお待ちください。
                   </p>
+                  {analysisSlowHint ? (
+                    <p className="text-xs text-amber-700 dark:text-amber-500/90 leading-relaxed max-w-sm mx-auto rounded-md bg-amber-500/10 border border-amber-500/25 px-3 py-2">
+                      まだかかっています。AIサービスが混雑していると1分ほどかかることがあります。
+                    </p>
+                  ) : null}
                 </div>
               </div>
             )}

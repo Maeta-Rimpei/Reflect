@@ -34,8 +34,71 @@ if (!apiKey) {
 /** Gemini クライアント（API キーがある場合のみ生成） */
 const genAI = apiKey ? new GoogleGenAI({ apiKey }) : null;
 
+/** generateContent の最大試行回数（初回 + リトライ） */
+const GEMINI_MAX_ATTEMPTS = 4;
+/** リトライ間隔の基準（指数バックオフ） */
+const GEMINI_BASE_DELAY_MS = 800;
+
 // ---------------------------------------------------------------------------
 // Helpers
+// ---------------------------------------------------------------------------
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Gemini の一時的な過負荷・レート制限に見えるエラーか（リトライ対象）。
+ * 応答本文が JSON 文字列の ApiError も想定。
+ */
+export function isGeminiRetryableError(error: unknown): boolean {
+  const raw =
+    error instanceof Error
+      ? `${error.name} ${error.message}`
+      : String(error);
+  return (
+    /"code"\s*:\s*503/.test(raw) ||
+    /UNAVAILABLE/i.test(raw) ||
+    /429/.test(raw) ||
+    /RESOURCE_EXHAUSTED/i.test(raw) ||
+    /high demand/i.test(raw) ||
+    /try again later/i.test(raw) ||
+    /overloaded/i.test(raw)
+  );
+}
+
+/**
+ * `models.generateContent` を指数バックオフ付きで呼ぶ。
+ * @param request - generateContent にそのまま渡す引数
+ * @param context - ログ用（関数名など）
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function generateContentWithRetry(request: any, context: string): Promise<any> {
+  if (!genAI) {
+    throw new Error("GEMINI_API_KEY is not configured");
+  }
+  for (let attempt = 0; attempt < GEMINI_MAX_ATTEMPTS; attempt++) {
+    try {
+      return await genAI.models.generateContent(request);
+    } catch (e) {
+      const canRetry =
+        attempt < GEMINI_MAX_ATTEMPTS - 1 && isGeminiRetryableError(e);
+      if (!canRetry) {
+        throw e;
+      }
+      const delay = GEMINI_BASE_DELAY_MS * 2 ** attempt;
+      logger.info(
+        `[gemini] ${context}: API が一時的に混雑のため再試行 (${attempt + 2}/${GEMINI_MAX_ATTEMPTS} 回目、${delay}ms 後)`,
+        { model: MODEL, delayMs: delay },
+      );
+      await sleep(delay);
+    }
+  }
+  throw new Error("generateContentWithRetry: exhausted attempts");
+}
+
+// ---------------------------------------------------------------------------
+// Helpers (parsing)
 // ---------------------------------------------------------------------------
 
 /**
@@ -118,26 +181,29 @@ export async function generateJournalAnalysis(
 
   const prompt = buildJournalPrompt(journalBody);
 
-  const result = await genAI.models.generateContent({
-    model: MODEL,
-    contents: prompt,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          summary: { type: Type.STRING },
-          primaryEmotion: { type: Type.STRING },
-          secondaryEmotion: { type: Type.STRING },
-          thoughtPatterns: { type: Type.ARRAY, items: { type: Type.STRING } },
-          tension: { type: Type.STRING },
-          metaInsight: { type: Type.STRING },
-          question: { type: Type.STRING },
+  const result = await generateContentWithRetry(
+    {
+      model: MODEL,
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            summary: { type: Type.STRING },
+            primaryEmotion: { type: Type.STRING },
+            secondaryEmotion: { type: Type.STRING },
+            thoughtPatterns: { type: Type.ARRAY, items: { type: Type.STRING } },
+            tension: { type: Type.STRING },
+            metaInsight: { type: Type.STRING },
+            question: { type: Type.STRING },
+          },
+          required: ["summary", "primaryEmotion", "secondaryEmotion", "thoughtPatterns", "tension", "metaInsight", "question"],
         },
-        required: ["summary", "primaryEmotion", "secondaryEmotion", "thoughtPatterns", "tension", "metaInsight", "question"],
       },
     },
-  });
+    "generateJournalAnalysis",
+  );
 
   const text = extractText(result);
   const parsed = parseJson(text, "journalAnalysis") as {
@@ -193,24 +259,27 @@ export async function generateWeeklyAnalysis(
 
   const prompt = buildWeeklyPrompt(periodFrom, periodTo, inputSummary);
 
-  const result = await genAI.models.generateContent({
-    model: MODEL,
-    contents: prompt,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          emotionDistribution: { type: Type.ARRAY, items: { type: Type.STRING } },
-          thoughtPatterns: { type: Type.ARRAY, items: { type: Type.STRING } },
-          stressTriggers: { type: Type.ARRAY, items: { type: Type.STRING } },
-          notableContradictions: { type: Type.ARRAY, items: { type: Type.STRING } },
-          weeklyInsight: { type: Type.STRING },
+  const result = await generateContentWithRetry(
+    {
+      model: MODEL,
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            emotionDistribution: { type: Type.ARRAY, items: { type: Type.STRING } },
+            thoughtPatterns: { type: Type.ARRAY, items: { type: Type.STRING } },
+            stressTriggers: { type: Type.ARRAY, items: { type: Type.STRING } },
+            notableContradictions: { type: Type.ARRAY, items: { type: Type.STRING } },
+            weeklyInsight: { type: Type.STRING },
+          },
+          required: ["emotionDistribution", "thoughtPatterns", "stressTriggers", "notableContradictions", "weeklyInsight"],
         },
-        required: ["emotionDistribution", "thoughtPatterns", "stressTriggers", "notableContradictions", "weeklyInsight"],
       },
     },
-  });
+    "generateWeeklyAnalysis",
+  );
 
   const text = extractText(result);
   const parsed = parseJson(text, "weeklyAnalysis") as Record<string, unknown>;
@@ -262,24 +331,27 @@ export async function generateMonthlyAnalysis(
 
   const prompt = buildMonthlyPrompt(periodFrom, periodTo, inputSummary);
 
-  const result = await genAI.models.generateContent({
-    model: MODEL,
-    contents: prompt,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          dominantEmotions: { type: Type.ARRAY, items: { type: Type.STRING } },
-          recurringThoughtPatterns: { type: Type.ARRAY, items: { type: Type.STRING } },
-          behaviorPatterns: { type: Type.ARRAY, items: { type: Type.STRING } },
-          stressSourcesRanking: { type: Type.ARRAY, items: { type: Type.STRING } },
-          monthlyInsight: { type: Type.STRING },
+  const result = await generateContentWithRetry(
+    {
+      model: MODEL,
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            dominantEmotions: { type: Type.ARRAY, items: { type: Type.STRING } },
+            recurringThoughtPatterns: { type: Type.ARRAY, items: { type: Type.STRING } },
+            behaviorPatterns: { type: Type.ARRAY, items: { type: Type.STRING } },
+            stressSourcesRanking: { type: Type.ARRAY, items: { type: Type.STRING } },
+            monthlyInsight: { type: Type.STRING },
+          },
+          required: ["dominantEmotions", "recurringThoughtPatterns", "behaviorPatterns", "stressSourcesRanking", "monthlyInsight"],
         },
-        required: ["dominantEmotions", "recurringThoughtPatterns", "behaviorPatterns", "stressSourcesRanking", "monthlyInsight"],
       },
     },
-  });
+    "generateMonthlyAnalysis",
+  );
 
   const text = extractText(result);
   const parsed = parseJson(text, "monthlyAnalysis") as Record<string, unknown>;
@@ -331,24 +403,27 @@ export async function generateYearlyAnalysis(
 
   const prompt = buildYearlyPrompt(periodFrom, periodTo, inputSummary);
 
-  const result = await genAI.models.generateContent({
-    model: MODEL,
-    contents: prompt,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          coreThoughtPatterns: { type: Type.ARRAY, items: { type: Type.STRING } },
-          emotionTrend: { type: Type.STRING },
-          stressSourcesRanking: { type: Type.ARRAY, items: { type: Type.STRING } },
-          motivationDrivers: { type: Type.ARRAY, items: { type: Type.STRING } },
-          identityTraits: { type: Type.ARRAY, items: { type: Type.STRING } },
+  const result = await generateContentWithRetry(
+    {
+      model: MODEL,
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            coreThoughtPatterns: { type: Type.ARRAY, items: { type: Type.STRING } },
+            emotionTrend: { type: Type.STRING },
+            stressSourcesRanking: { type: Type.ARRAY, items: { type: Type.STRING } },
+            motivationDrivers: { type: Type.ARRAY, items: { type: Type.STRING } },
+            identityTraits: { type: Type.ARRAY, items: { type: Type.STRING } },
+          },
+          required: ["coreThoughtPatterns", "emotionTrend", "stressSourcesRanking", "motivationDrivers", "identityTraits"],
         },
-        required: ["coreThoughtPatterns", "emotionTrend", "stressSourcesRanking", "motivationDrivers", "identityTraits"],
       },
     },
-  });
+    "generateYearlyAnalysis",
+  );
 
   const text = extractText(result);
   const parsed = parseJson(text, "yearlyAnalysis") as Record<string, unknown>;
@@ -394,24 +469,27 @@ export async function generatePersonalitySummary(
 
   const prompt = buildPersonalityPrompt(summariesInput);
 
-  const result = await genAI.models.generateContent({
-    model: MODEL,
-    contents: prompt,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          tendency: { type: Type.STRING },
-          strengthSignals: { type: Type.ARRAY, items: { type: Type.STRING } },
-          riskPatterns: { type: Type.ARRAY, items: { type: Type.STRING } },
-          downTriggers: { type: Type.STRING },
-          recoveryActions: { type: Type.STRING },
+  const result = await generateContentWithRetry(
+    {
+      model: MODEL,
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            tendency: { type: Type.STRING },
+            strengthSignals: { type: Type.ARRAY, items: { type: Type.STRING } },
+            riskPatterns: { type: Type.ARRAY, items: { type: Type.STRING } },
+            downTriggers: { type: Type.STRING },
+            recoveryActions: { type: Type.STRING },
+          },
+          required: ["tendency", "strengthSignals", "riskPatterns", "downTriggers", "recoveryActions"],
         },
-        required: ["tendency", "strengthSignals", "riskPatterns", "downTriggers", "recoveryActions"],
       },
     },
-  });
+    "generatePersonalitySummary",
+  );
 
   const text = extractText(result);
   const parsed = parseJson(text, "personalitySummary") as Record<string, unknown>;
@@ -451,17 +529,20 @@ export async function generateQuestions(inputSummary: string): Promise<string[]>
 
   const prompt = buildQuestionsPrompt(inputSummary);
 
-  const result = await genAI.models.generateContent({
-    model: MODEL,
-    contents: prompt,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.ARRAY,
-        items: { type: Type.STRING },
+  const result = await generateContentWithRetry(
+    {
+      model: MODEL,
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.ARRAY,
+          items: { type: Type.STRING },
+        },
       },
     },
-  });
+    "generateQuestions",
+  );
 
   const text = extractText(result);
   const parsed = parseJson(text, "questions");

@@ -1,7 +1,17 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ChevronLeft, ChevronRight, Lock, Laugh, Smile, Meh, Frown, HeartCrack } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Lock,
+  Laugh,
+  Smile,
+  Meh,
+  Frown,
+  HeartCrack,
+  Loader2,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getApiHeaders } from "@/lib/api-auth";
 import {
@@ -443,7 +453,20 @@ export function HistoryPage({
   if (loading) {
     return (
       <div className="mx-auto max-w-2xl px-4 py-8 md:px-6 md:py-12">
-        <p className="text-sm text-muted-foreground">読み込み中…</p>
+        <div
+          className="flex flex-col items-center justify-center gap-3 py-12 text-center"
+          role="status"
+          aria-live="polite"
+          aria-label="履歴を読み込み中"
+        >
+          <Loader2 className="h-9 w-9 animate-spin text-foreground/70" aria-hidden />
+          <div className="space-y-1">
+            <p className="text-sm font-medium text-foreground">読み込み中です</p>
+            <p className="text-xs text-muted-foreground max-w-xs leading-relaxed">
+              ふりかえりの情報を取得しています。しばらくお待ちください。
+            </p>
+          </div>
+        </div>
       </div>
     );
   }
@@ -755,6 +778,15 @@ export function HistoryPage({
                   : "保存して再分析する"}
               </button>
             </div>
+            {editSubmitMode === "saveAndReanalyze" ? (
+              <p
+                className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-foreground/90 leading-relaxed"
+                role="status"
+                aria-live="polite"
+              >
+                保存後、再分析が始まります。完了まで数十秒〜1分ほどかかることがあります。この画面のままお待ちください。
+              </p>
+            ) : null}
             </div>
           </div>
         </div>
