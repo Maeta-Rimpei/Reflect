@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
+import { checkAdminBasicAuth } from "@/lib/admin-basic-auth";
 import { isAdminConfigured, isAdminEmail } from "@/lib/admin-env";
 
 /** Auth.js と同じ secure cookie 判定（AUTH_URL / NEXTAUTH_URL のプロトコル） */
@@ -19,6 +20,11 @@ export async function middleware(req: NextRequest) {
 
   if (!pathname.startsWith("/admin")) {
     return NextResponse.next();
+  }
+
+  const basicAuthResponse = checkAdminBasicAuth(req);
+  if (basicAuthResponse) {
+    return basicAuthResponse;
   }
 
   if (!isAdminConfigured()) {

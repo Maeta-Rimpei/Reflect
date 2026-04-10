@@ -1,4 +1,5 @@
 import packageJson from "@/package.json";
+import { isAdminBasicAuthConfigured } from "@/lib/admin-basic-auth";
 
 function flag(on: boolean): string {
   return on ? "設定あり" : "未設定";
@@ -21,6 +22,10 @@ export default function AdminSystemPage() {
 
   const rows: { label: string; value: string }[] = [
     { label: "アプリバージョン", value: packageJson.version ?? "—" },
+    {
+      label: "ADMIN_BASIC_AUTH_USER / PASSWORD（/admin の追加壁）",
+      value: flag(isAdminBasicAuthConfigured()),
+    },
     { label: "NODE_ENV", value: process.env.NODE_ENV ?? "—" },
     {
       label: "AUTH_URL / NEXTAUTH_URL",
