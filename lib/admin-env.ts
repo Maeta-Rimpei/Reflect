@@ -2,6 +2,8 @@
  * 管理画面の案 A: 環境変数 ADMIN_EMAILS（カンマ区切り・大小無視）で管理者を判定する。
  */
 
+import { isAdminBasicAuthConfigured } from "@/lib/admin-basic-auth";
+
 function normalizeEmail(s: string): string {
   return s.trim().toLowerCase();
 }
@@ -26,4 +28,19 @@ export function isAdminEmail(email: string | null | undefined): boolean {
   const set = getAdminEmailSet();
   if (!set || !email) return false;
   return set.has(normalizeEmail(email));
+}
+
+/** 管理パネル用パスワード（2 段目）が設定されているか */
+export function isAdminPanelPasswordConfigured(): boolean {
+  const p = process.env.ADMIN_PANEL_PASSWORD;
+  return typeof p === "string" && p.length > 0;
+}
+
+/** ADMIN_EMAILS, Basic, panel password, and signing secret are all set. */
+export function isAdminHardSurfaceConfigured(): boolean {
+  if (!isAdminConfigured() || !isAdminBasicAuthConfigured() || !isAdminPanelPasswordConfigured()) {
+    return false;
+  }
+  const secret = process.env.ADMIN_PANEL_SECRET ?? process.env.AUTH_SECRET;
+  return typeof secret === "string" && secret.length > 0;
 }

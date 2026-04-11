@@ -5,7 +5,7 @@ import {
   createSupabaseAdminClient,
   isSupabaseAdminConfigured,
 } from "@/lib/supabase-admin";
-import { verifyPassword } from "@/lib/password";
+import { authenticateEmailPassword } from "@/lib/email-password-login";
 import { PLAN_FREE } from "@/constants/plan";
 
 /** セッション全体の有効期限（リフレッシュトークン相当）= 30日 */
@@ -42,24 +42,14 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         if (!email || !password || !isSupabaseAdminConfigured()) return null;
 
         const supabase = createSupabaseAdminClient();
+        const result = await authenticateEmailPassword(supabase, email, password);
+        if (!result.ok) return null;
 
-        const { data: user } = await supabase
-          .from("users")
-          .select("id, email, name, password_hash, email_verified, deleted_at")
-          .eq("email", email)
-          .single();
-
-        if (!user || !user.password_hash) return null;
-
-        // 論理削除済みはログイン不可
-        if ((user as { deleted_at?: string | null }).deleted_at) return null;
-        // メール未認証はログイン不可
-        if (user.email_verified === false) return null;
-
-        const valid = await verifyPassword(password, user.password_hash);
-        if (!valid) return null;
-
-        return { id: user.id, email: user.email, name: user.name };
+        return {
+          id: result.user?.id ?? "",
+          email: result.user?.email ?? "",
+          name: result.user?.name ?? null,
+        };
       },
     }),
 

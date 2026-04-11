@@ -1,4 +1,5 @@
 export * from "./analysis";
+export * from "./email-password-login";
 export * from "./contact";
 export * from "./journal";
 export * from "./entry";

@@ -3,7 +3,10 @@ import {
   createSupabaseAdminClient,
   isSupabaseAdminConfigured,
 } from "@/lib/supabase-admin";
-import { verifyPassword } from "@/lib/password";
+import {
+  authenticateEmailPassword,
+  PASSWORD_LOGIN_LOCKED_MESSAGE,
+} from "@/lib/email-password-login";
 import { logger } from "@/lib/logger";
 
 /**
@@ -42,37 +45,37 @@ export async function POST(req: NextRequest) {
 
   try {
     const supabase = createSupabaseAdminClient();
+    const result = await authenticateEmailPassword(supabase, email, password);
 
-    const { data: user } = await supabase
-      .from("users")
-      .select("id, password_hash, email_verified")
-      .eq("email", email)
-      .single();
-
-    if (!user || !user.password_hash) {
-      return NextResponse.json(
-        { error: "invalid", message: "メールアドレスまたはパスワードが正しくありません。" },
-        { status: 401 },
-      );
+    if (result.ok) {
+      return NextResponse.json({ ok: true });
     }
 
-    // メール未認証チェック
-    if (user.email_verified === false) {
+    if (result.reason === "unverified") {
       return NextResponse.json(
-        { error: "unverified", message: "メールアドレスが未認証です。登録時に届いたメールのリンクをクリックしてください。" },
+        {
+          error: "unverified",
+          message:
+            "メールアドレスが未認証です。登録時に届いたメールのリンクをクリックしてください。",
+        },
         { status: 403 },
       );
     }
 
-    const valid = await verifyPassword(password, user.password_hash);
-    if (!valid) {
+    if (result.reason === "locked") {
       return NextResponse.json(
-        { error: "invalid", message: "メールアドレスまたはパスワードが正しくありません。" },
-        { status: 401 },
+        { error: "locked", message: PASSWORD_LOGIN_LOCKED_MESSAGE },
+        { status: 429 },
       );
     }
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json(
+      {
+        error: "invalid",
+        message: "メールアドレスまたはパスワードが正しくありません。",
+      },
+      { status: 401 },
+    );
   } catch (e) {
     logger.errorException("[verify-credentials] 認証情報検証でエラー", e, {
       email,

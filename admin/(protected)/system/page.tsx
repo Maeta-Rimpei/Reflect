@@ -1,5 +1,7 @@
 import packageJson from "@/package.json";
 import { isAdminBasicAuthConfigured } from "@/lib/admin-basic-auth";
+import { isAdminHardSurfaceConfigured, isAdminPanelPasswordConfigured } from "@/lib/admin-env";
+import { isAdminPanelSigningConfigured } from "@/lib/admin-panel-token";
 
 function flag(on: boolean): string {
   return on ? "設定あり" : "未設定";
@@ -23,8 +25,20 @@ export default function AdminSystemPage() {
   const rows: { label: string; value: string }[] = [
     { label: "アプリバージョン", value: packageJson.version ?? "—" },
     {
-      label: "ADMIN_BASIC_AUTH_USER / PASSWORD（/admin の追加壁）",
+      label: "ADMIN_BASIC_AUTH_USER / PASSWORD（HTTP Basic）",
       value: flag(isAdminBasicAuthConfigured()),
+    },
+    {
+      label: "ADMIN_PANEL_PASSWORD（2 段目・試行 10 回でロック）",
+      value: flag(isAdminPanelPasswordConfigured()),
+    },
+    {
+      label: "ADMIN_PANEL_SECRET または AUTH_SECRET（パネル Cookie 署名）",
+      value: flag(isAdminPanelSigningConfigured()),
+    },
+    {
+      label: "管理ハード面（Basic + パネル + 署名 + ADMIN_EMAILS）",
+      value: flag(isAdminHardSurfaceConfigured()),
     },
     { label: "NODE_ENV", value: process.env.NODE_ENV ?? "—" },
     {

@@ -18,6 +18,10 @@ export const stripe =
 export const STRIPE_DEEP_PRICE_ID = process.env.STRIPE_DEEP_PRICE_ID ?? "";
 export const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET ?? "";
 
+/**
+ * Stripe が設定されているかどうかを判定する。
+ * @returns 設定されている場合は true、設定されていない場合は false を返す。
+ */
 export function isStripeConfigured(): boolean {
   return Boolean(
     process.env.STRIPE_SECRET_KEY &&

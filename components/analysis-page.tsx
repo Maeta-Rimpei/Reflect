@@ -517,7 +517,7 @@ export function AnalysisPage({
               {GENERATING_LABEL[generating]}を生成しています
             </p>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              AIの応答まで数十秒〜1分ほどかかることがあります。この画面のままお待ちください。
+              分析の生成には数十秒〜1分ほどかかることがあります。この画面のままお待ちください。
             </p>
           </div>
         </div>
