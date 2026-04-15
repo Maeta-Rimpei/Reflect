@@ -6,6 +6,7 @@ import {
 } from "@/lib/supabase-admin";
 import { stripe, isStripeConfigured } from "@/lib/stripe";
 import { logger } from "@/lib/logger";
+import { COOKIE_STRIPE_PORTAL_REAUTH } from "@/constants/cookies";
 
 /**
  * Create a Stripe Customer Portal session for the current user.
@@ -23,6 +24,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       { error: "unavailable", message: "Stripe is not configured" },
       { status: 503 },
+    );
+  }
+
+  const reauthCookie = req.cookies.get(COOKIE_STRIPE_PORTAL_REAUTH)?.value;
+  if (reauthCookie !== "1") {
+    return NextResponse.json(
+      { error: "reauth_required", message: "本人確認のため再認証が必要です。" },
+      { status: 403 },
     );
   }
 
@@ -61,7 +70,15 @@ export async function POST(req: NextRequest) {
       return_url: returnUrl,
     });
 
-    return NextResponse.json({ url: session.url });
+    const res = NextResponse.json({ url: session.url });
+    // 使い捨てにして、毎回ポータル起動前に再認証を要求する
+    res.cookies.set(COOKIE_STRIPE_PORTAL_REAUTH, "", {
+      path: "/api/stripe/create-portal-session",
+      maxAge: 0,
+      httpOnly: true,
+      sameSite: "lax",
+    });
+    return res;
   } catch (e) {
     logger.errorException("[stripe create-portal-session] ポータルセッション作成でエラー", e, {
       userId,

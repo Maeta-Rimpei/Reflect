@@ -28,6 +28,7 @@ export default async function Page({
       <SettingsPage
         initialProfile={{ plan: profile.plan, email: profile.email, name: profile.name }}
         initialMessage={initialMessage}
+        initialAuthProvider={session.user.authProvider ?? null}
       />
     </Suspense>
   );

@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { signOut } from "next-auth/react";
+import { signIn, signOut } from "next-auth/react";
 import { Badge } from "@/components/ui/badge";
 import { ReflectUsageGuide } from "@/components/reflect-usage-guide";
 import { Separator } from "@/components/ui/separator";
@@ -45,12 +45,20 @@ const deepPlan = {
 export function SettingsPage({
   initialProfile,
   initialMessage,
+  initialAuthProvider,
 }: {
   /** サーバーで取得したプロフィール。ある場合は初回の /api/v1/me 取得をスキップする */
   initialProfile?: ServerProfile | null;
   /** サーバーで searchParams から組み立てたメッセージ（例: 支払いキャンセル） */
   initialMessage?: { type: "success" | "error" | "info"; text: string } | null;
+  /** 現在セッションのログイン方式（google / email-password / magic-link など） */
+  initialAuthProvider?: string | null;
 }) {
+  const redirectToLogin = () => {
+    const callbackUrl = encodeURIComponent("/settings");
+    window.location.href = `/login?callbackUrl=${callbackUrl}`;
+  };
+
   const searchParams = useSearchParams();
   /** UI で選択中のプラン（ラジオ用） */
   const [selectedPlan, setSelectedPlan] = useState<Plan>(
@@ -66,6 +74,7 @@ export function SettingsPage({
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   /** Stripe カスタマーポータル起動中か */
   const [portalLoading, setPortalLoading] = useState(false);
+  const authProvider = initialAuthProvider ?? null;
   /** 退会確認ダイアログを表示しているか */
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   /** 退会 API 実行中か */
@@ -147,6 +156,11 @@ export function SettingsPage({
         credentials: "include",
       });
       const data = (await res.json()) as { url?: string; message?: string };
+      if (res.status === 401) {
+        setMessage({ type: "error", text: "セッションの有効期限が切れました。再ログインしてください。" });
+        redirectToLogin();
+        return;
+      }
       if (res.ok && data.url) {
         window.location.href = data.url;
         return;
@@ -158,7 +172,7 @@ export function SettingsPage({
   };
 
   /** Stripe カスタマーポータルを開く（支払い方法・解約など） */
-  const handlePortal = async () => {
+  const openPortalSession = useCallback(async () => {
     const headers = await getApiHeaders();
     setPortalLoading(true);
     setMessage(null);
@@ -169,6 +183,11 @@ export function SettingsPage({
         credentials: "include",
       });
       const data = (await res.json()) as { url?: string; message?: string };
+      if (res.status === 401) {
+        setMessage({ type: "error", text: "セッションの有効期限が切れました。再ログインしてください。" });
+        redirectToLogin();
+        return;
+      }
       if (res.ok && data.url) {
         window.open(data.url, "_blank", "noopener,noreferrer");
         return;
@@ -177,6 +196,76 @@ export function SettingsPage({
     } finally {
       setPortalLoading(false);
     }
+  }, []);
+
+  useEffect(() => {
+    if (searchParams.get("reauth") !== "google") return;
+    let cancelled = false;
+    const nextUrl = new URL(window.location.href);
+    nextUrl.searchParams.delete("reauth");
+    window.history.replaceState({}, "", nextUrl.toString());
+
+    async function confirmGoogleReauthAndOpen() {
+      const headers = await getApiHeaders();
+      const res = await fetch("/api/auth/reauth/confirm", {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ mode: "google" }),
+      });
+      if (!res.ok) {
+        if (!cancelled) {
+          setMessage({ type: "error", text: "Google の再認証に失敗しました。もう一度お試しください。" });
+        }
+        return;
+      }
+      if (!cancelled) {
+        void openPortalSession();
+      }
+    }
+
+    void confirmGoogleReauthAndOpen();
+    return () => {
+      cancelled = true;
+    };
+  }, [searchParams, openPortalSession]);
+
+  const handlePortal = async () => {
+    if (authProvider === "google") {
+      await signIn(
+        "google",
+        { callbackUrl: "/settings?reauth=google" },
+        { prompt: "login", max_age: "0" },
+      );
+      return;
+    }
+
+    if (!email) {
+      setMessage({ type: "error", text: "メールアドレスが取得できないため操作できません。" });
+      return;
+    }
+    const password = window.prompt("確認のためパスワードを入力してください");
+    if (!password) return;
+
+    const headers = await getApiHeaders();
+    const verifyRes = await fetch("/api/auth/reauth/confirm", {
+      method: "POST",
+      headers: { ...headers, "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ mode: "password", password }),
+    });
+    const verifyBody = (await verifyRes.json().catch(() => ({}))) as {
+      message?: string;
+    };
+    if (!verifyRes.ok) {
+      setMessage({
+        type: "error",
+        text: verifyBody.message ?? "パスワード確認に失敗しました。",
+      });
+      return;
+    }
+
+    await openPortalSession();
   };
 
   return (
@@ -442,6 +531,15 @@ export function SettingsPage({
                     const body = (await res.json().catch(() => ({}))) as {
                       message?: string;
                     };
+                    if (res.status === 401) {
+                      setMessage({
+                        type: "error",
+                        text: "セッションの有効期限が切れました。再ログインしてください。",
+                      });
+                      setDeleteConfirm(false);
+                      redirectToLogin();
+                      return;
+                    }
                     if (res.ok) {
                       window.location.href = "/goodbye";
                     } else {

@@ -1,6 +1,8 @@
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
 import Credentials from "next-auth/providers/credentials";
+import { encode as defaultJwtEncode } from "@auth/core/jwt";
+import type { JWTEncodeParams } from "@auth/core/jwt";
 import {
   createSupabaseAdminClient,
   isSupabaseAdminConfigured,
@@ -8,16 +10,73 @@ import {
 import { authenticateEmailPassword } from "@/lib/email-password-login";
 import { PLAN_FREE } from "@/constants/plan";
 
-/** セッション全体の有効期限（リフレッシュトークン相当）= 30日 */
-const SESSION_MAX_AGE = 60 * 60 * 24 * 30;
-/** JWT の更新間隔（アクセストークン相当）= 1時間。この間隔で次のリクエスト時に JWT が再発行される */
-const SESSION_UPDATE_AGE = 60 * 60;
+function parsePositiveIntEnv(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (raw == null || raw === "") return fallback;
+  const n = Number.parseInt(raw, 10);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+/**
+ * セッション JWT の寿命（秒）。この時間以上リクエストが無いとログアウト相当になる（rolling）。
+ * 環境変数: AUTH_SESSION_MAX_AGE_SEC
+ */
+const SESSION_MAX_AGE = parsePositiveIntEnv(
+  "AUTH_SESSION_MAX_AGE_SEC",
+  60 * 60 * 24 * 30,
+);
+
+/**
+ * JWT の rolling を抑える間隔（秒）。この時間より短い間隔のリクエストではセッション期限を延長しない。
+ * Auth.js の JWT 戦略は本来 session.updateAge を無視するため、jwt.encode をラップして反映する。
+ * 環境変数: AUTH_SESSION_UPDATE_AGE_SEC
+ */
+const SESSION_UPDATE_AGE = parsePositiveIntEnv(
+  "AUTH_SESSION_UPDATE_AGE_SEC",
+  60 * 60,
+);
+
+const AUTH_LAST_ROLL = "auth_last_roll" as const;
+
+async function jwtEncodeWithThrottledRoll(params: JWTEncodeParams) {
+  const { token = {}, maxAge: configuredMaxAge, ...rest } = params;
+  const maxAge = configuredMaxAge ?? SESSION_MAX_AGE;
+  const nowSec = Math.floor(Date.now() / 1000);
+  const t = token as Record<string, unknown>;
+  const lastRollRaw = t[AUTH_LAST_ROLL];
+  const lastRoll =
+    typeof lastRollRaw === "number" && Number.isFinite(lastRollRaw)
+      ? lastRollRaw
+      : nowSec;
+  const existingExp = typeof t.exp === "number" ? t.exp : undefined;
+
+  let effectiveMaxAge = maxAge;
+  if (
+    existingExp != null &&
+    existingExp > nowSec &&
+    nowSec - lastRoll < SESSION_UPDATE_AGE
+  ) {
+    effectiveMaxAge = Math.max(1, existingExp - nowSec);
+  } else {
+    t[AUTH_LAST_ROLL] = nowSec;
+    effectiveMaxAge = maxAge;
+  }
+
+  return defaultJwtEncode({
+    ...rest,
+    token: t,
+    maxAge: effectiveMaxAge,
+  });
+}
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   secret: process.env.AUTH_SECRET,
   session: {
     maxAge: SESSION_MAX_AGE,
     updateAge: SESSION_UPDATE_AGE,
+  },
+  jwt: {
+    encode: jwtEncodeWithThrottledRoll,
   },
   providers: [
     Google({
@@ -136,9 +195,11 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         token.name = user.name;
       }
       if (account) {
+        token.authProvider = account.provider;
         if (account.provider === "google") {
           // Google の安定した sub をユーザー ID として固定する
           token.sub = account.providerAccountId;
+          token.googleReauthAt = Math.floor(Date.now() / 1000);
         } else if (user?.id) {
           // email-password / magic-link: authorize で返したユーザー ID を使う
           token.sub = user.id;
@@ -150,6 +211,18 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       if (session.user && token.sub) {
         session.user.id = token.sub;
       }
+      if (session.user && typeof token.authProvider === "string") {
+        session.user.authProvider = token.authProvider;
+      }
+      if (typeof token.googleReauthAt === "number") {
+        (session as { googleReauthAt?: number }).googleReauthAt = token.googleReauthAt;
+      }
+      // コア実装は常に「今から maxAge」を返すが、updateAge 抑制時は JWT の exp とずれるため実際の期限を使う
+      if (typeof token.exp === "number") {
+        (session as { expires: string }).expires = new Date(
+          token.exp * 1000,
+        ).toISOString();
+      }
       return session;
     },
   },
@@ -160,8 +233,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
 declare module "next-auth" {
   interface Session {
+    googleReauthAt?: number;
     user: {
       id: string;
+      authProvider?: string;
       name?: string | null;
       email?: string | null;
       image?: string | null;
