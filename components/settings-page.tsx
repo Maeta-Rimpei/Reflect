@@ -189,7 +189,13 @@ export function SettingsPage({
         return;
       }
       if (res.ok && data.url) {
-        window.open(data.url, "_blank", "noopener,noreferrer");
+        const win = window.open(data.url, "_blank", "noopener,noreferrer");
+        if (!win) {
+          setMessage({
+            type: "error",
+            text: "ポップアップがブロックされました。ブラウザ設定でポップアップを許可してください。",
+          });
+        }
         return;
       }
       setMessage({ type: "error", text: data.message ?? "ポータルを開けませんでした。" });
@@ -200,10 +206,6 @@ export function SettingsPage({
 
   useEffect(() => {
     if (searchParams.get("reauth") !== "google") return;
-    let cancelled = false;
-    const nextUrl = new URL(window.location.href);
-    nextUrl.searchParams.delete("reauth");
-    window.history.replaceState({}, "", nextUrl.toString());
 
     async function confirmGoogleReauthAndOpen() {
       const headers = await getApiHeaders();
@@ -214,20 +216,19 @@ export function SettingsPage({
         body: JSON.stringify({ mode: "google" }),
       });
       if (!res.ok) {
-        if (!cancelled) {
-          setMessage({ type: "error", text: "Google の再認証に失敗しました。もう一度お試しください。" });
-        }
+        setMessage({ type: "error", text: "Google の再認証に失敗しました。もう一度お試しください。" });
         return;
       }
-      if (!cancelled) {
-        void openPortalSession();
-      }
+
+      // 確認完了後に URL のノイズだけ消す（先に消すと effect cleanup で処理が中断される）
+      const nextUrl = new URL(window.location.href);
+      nextUrl.searchParams.delete("reauth");
+      window.history.replaceState({}, "", nextUrl.toString());
+
+      await openPortalSession();
     }
 
     void confirmGoogleReauthAndOpen();
-    return () => {
-      cancelled = true;
-    };
   }, [searchParams, openPortalSession]);
 
   const handlePortal = async () => {
